@@ -130,7 +130,7 @@ def voice_recognition_loop():
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
     
-    print("[INFO] 语音识别启动，喊"卡比"试试！")
+    print('[INFO] 语音识别启动，喊"卡比"试试！')
     
     with mic as source:
         recognizer.adjust_for_ambient_noise(source, duration=1)
@@ -144,8 +144,8 @@ def voice_recognition_loop():
             text = recognizer.recognize_google(audio, language="zh-CN")
             print(f"[VOICE] 识别到: {text}")
             
-            if "卡比" in text or "卡逼" in text or "科比" in text:
-                print("[VOICE] ★ 检测到呼唤卡比！")
+            if '卡比' in text or '卡逼' in text or '科比' in text:
+                print('[VOICE] ★ 检测到呼唤卡比！')
                 voice_wake_until = time.time() + 2.0
                 mouth_event_until = time.time() + 1.5
                 
