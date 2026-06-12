@@ -16,6 +16,7 @@ import time
 import random
 import math
 import sys
+import os
 
 # ── 配置 ──────────────────────────────────────────────
 WIDTH, HEIGHT = 500, 500
@@ -94,8 +95,24 @@ def face_detection_loop():
     global face_x, face_y, last_face_time, camera_status
     global camera_debug_frame, detection_count
     
-    mp_face = mp.solutions.face_detection
-    mp_draw = mp.solutions.drawing_utils
+    import mediapipe as mp_new
+    from mediapipe.tasks import python as mp_python
+    from mediapipe.tasks.python import vision
+    
+    # 加载模型
+    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "blaze_face_short_range.tflite")
+    if not os.path.exists(model_path):
+        camera_status = "failed"
+        print(f"[ERROR] 模型文件不存在: {model_path}")
+        return
+    
+    base_options = mp_python.BaseOptions(model_asset_path=model_path)
+    options = vision.FaceDetectorOptions(
+        base_options=base_options,
+        min_detection_confidence=0.4,
+        running_mode=vision.RunningMode.VIDEO,
+    )
+    detector = vision.FaceDetector.create_from_options(options)
     
     print("[INFO] 正在打开摄像头...")
     cap = cv2.VideoCapture(0)
@@ -108,57 +125,56 @@ def face_detection_loop():
     print("[INFO] 摄像头已打开，开始人脸检测")
     print("[INFO] 按 Q 关闭调试窗口")
     
-    with mp_face.FaceDetection(model_selection=0, min_detection_confidence=0.4) as fd:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                camera_status = "failed"
-                time.sleep(0.1)
-                continue
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            camera_status = "failed"
+            time.sleep(0.1)
+            continue
+        
+        small = cv2.resize(frame, (320, 240))
+        rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+        mp_image = mp_new.Image(image_format=mp_new.ImageFormat.SRGB, data=rgb)
+        ts = int(cap.get(cv2.CAP_PROP_POS_MSEC))
+        result = detector.detect_for_video(mp_image, ts)
+        
+        debug = small.copy()
+        
+        if result.detections:
+            det = result.detections[0]
+            bbox = det.bounding_box
+            # bbox 是像素坐标
+            cx = (bbox.origin_x + bbox.width / 2) / 320.0
+            cy = (bbox.origin_y + bbox.height / 2) / 240.0
+            face_x = cx
+            face_y = cy
+            last_face_time = time.time()
+            detection_count += 1
+            camera_status = "tracking"
             
-            small = cv2.resize(frame, (320, 240))
-            rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-            result = fd.process(rgb)
-            
-            debug = small.copy()
-            
-            if result.detections:
-                det = result.detections[0]
-                bbox = det.location_data.relative_bounding_box
-                cx = bbox.xmin + bbox.width / 2
-                cy = bbox.ymin + bbox.height / 2
-                face_x = cx
-                face_y = cy
-                last_face_time = time.time()
-                detection_count += 1
-                camera_status = "tracking"
-                
-                # 画检测框
-                h, w, _ = debug.shape
-                x1 = int(bbox.xmin * w)
-                y1 = int(bbox.ymin * h)
-                x2 = int((bbox.xmin + bbox.width) * w)
-                y2 = int((bbox.ymin + bbox.height) * h)
-                cv2.rectangle(debug, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(debug, f"TRACKING", (x1, y1 - 8),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-                cv2.putText(debug, f"face=({cx:.2f},{cy:.2f})", (5, 225),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
-            else:
-                face_x = None
-                face_y = None
-                camera_status = "no_face"
-                cv2.putText(debug, "NO FACE", (10, 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-            
-            camera_debug_frame = debug
-            
-            # 调试窗口
-            cv2.imshow("Kirby Debug - Camera", debug)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-            
-            time.sleep(0.03)
+            # 画检测框
+            x1, y1 = bbox.origin_x, bbox.origin_y
+            x2, y2 = bbox.origin_x + bbox.width, bbox.origin_y + bbox.height
+            cv2.rectangle(debug, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(debug, "TRACKING", (x1, y1 - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            cv2.putText(debug, f"face=({cx:.2f},{cy:.2f})", (5, 225),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+        else:
+            face_x = None
+            face_y = None
+            camera_status = "no_face"
+            cv2.putText(debug, "NO FACE", (10, 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        
+        camera_debug_frame = debug
+        
+        # 调试窗口
+        cv2.imshow("Kirby Debug - Camera", debug)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+        
+        time.sleep(0.03)
 
 # ── 绘制眼睛 ────────────────────────────────────────────
 def draw_eyes(screen, eye_open_ratio=1.0):
