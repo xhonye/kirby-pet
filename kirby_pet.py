@@ -86,83 +86,34 @@ camera_status = "init"
 camera_debug_frame = None
 detection_count = 0
 
-# ── 音效生成 ────────────────────────────────────────────
-def make_sound_from_wave(wave_data, volume=0.4):
-    """将 numpy 波形转为 pygame.Sound"""
-    wave_data = wave_data * volume
-    samples = (np.clip(wave_data, -1, 1) * 32767).astype(np.int16)
-    stereo = np.column_stack((samples, samples))
-    return pygame.sndarray.make_sound(stereo)
-
-def gen_poyo():
-    """卡比 poyo 声：上升的可爱音调"""
-    dur = random.uniform(0.15, 0.3)
-    t = np.linspace(0, dur, int(SAMPLE_RATE * dur), endpoint=False)
-    freq = random.uniform(500, 700)
-    freq_end = freq * random.uniform(1.3, 1.6)
-    f = freq + (freq_end - freq) * t / dur
-    wave = np.sin(2 * np.pi * f * t)
-    env = np.ones_like(t)
-    att = max(1, int(0.02 * SAMPLE_RATE))
-    dec = max(1, int(0.05 * SAMPLE_RATE))
-    env[:att] = np.linspace(0, 1, att)
-    env[-dec:] = np.linspace(1, 0, dec)
-    return make_sound_from_wave(wave * env, 0.35)
-
-def gen_happy_melody():
-    """卡比开心哼歌：短旋律"""
-    notes = [523, 659, 784, 880]  # C5 E5 G5 A5
-    dur = 0.12
-    parts = []
-    for n in notes[:random.randint(2, 4)]:
-        t = np.linspace(0, dur, int(SAMPLE_RATE * dur), endpoint=False)
-        wave = 0.6 * np.sin(2 * np.pi * n * t) + 0.3 * np.sin(2 * np.pi * n * 2 * t)
-        env = np.ones_like(t)
-        dec = max(1, int(0.03 * SAMPLE_RATE))
-        env[-dec:] = np.linspace(1, 0, dec)
-        parts.append(wave * env)
-    return make_sound_from_wave(np.concatenate(parts), 0.3)
-
-def gen_inhale():
-    """卡比吸气声：白噪声滤波"""
-    dur = random.uniform(0.3, 0.6)
-    t = np.linspace(0, dur, int(SAMPLE_RATE * dur), endpoint=False)
-    noise = np.random.randn(len(t)) * 0.3
-    # 带通：只保留 800-3000Hz
-    freqs = np.fft.rfftfreq(len(t), 1/SAMPLE_RATE)
-    spec = np.fft.rfft(noise)
-    spec[(freqs < 800) | (freqs > 3000)] *= 0.1
-    wave = np.fft.irfft(spec, len(t))
-    env = np.ones_like(t)
-    att = max(1, int(0.05 * SAMPLE_RATE))
-    env[:att] = np.linspace(0, 1, att)
-    env[-att:] = np.linspace(1, 0, att)
-    return make_sound_from_wave(wave * env, 0.25)
-
-def gen_hurt():
-    """卡比受伤声：短促下降音"""
-    dur = 0.15
-    t = np.linspace(0, dur, int(SAMPLE_RATE * dur), endpoint=False)
-    f = 800 - 400 * t / dur
-    wave = np.sin(2 * np.pi * f * t)
-    env = np.ones_like(t)
-    dec = max(1, int(0.04 * SAMPLE_RATE))
-    env[-dec:] = np.linspace(1, 0, dec)
-    return make_sound_from_wave(wave * env, 0.4)
-
-def gen_pet_purr():
-    """被摸时的满足声：低频振动"""
-    dur = 0.5
-    t = np.linspace(0, dur, int(SAMPLE_RATE * dur), endpoint=False)
-    wave = 0.5 * np.sin(2 * np.pi * 120 * t) + 0.3 * np.sin(2 * np.pi * 180 * t)
-    # 颤音
-    wave *= 1 + 0.3 * np.sin(2 * np.pi * 8 * t)
-    env = np.ones_like(t)
-    att = max(1, int(0.08 * SAMPLE_RATE))
-    dec = max(1, int(0.1 * SAMPLE_RATE))
-    env[:att] = np.linspace(0, 1, att)
-    env[-dec:] = np.linspace(1, 0, dec)
-    return make_sound_from_wave(wave * env, 0.3)
+# ── 音效加载 ────────────────────────────────────────────
+def load_sounds():
+    """从 sounds/ 目录加载 MP3 音效文件"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sounds_dir = os.path.join(script_dir, "sounds")
+    loaded = {}
+    
+    sound_map = {
+        "poyo": ["poyo.mp3"],
+        "happy": ["happy.mp3"],
+        "inhale": ["inhale.mp3"],
+        "hurt": ["hurt.mp3"],
+        "pet": ["pet.mp3"],
+    }
+    
+    for name, files in sound_map.items():
+        for fname in files:
+            path = os.path.join(sounds_dir, fname)
+            if os.path.exists(path):
+                try:
+                    loaded[name] = [pygame.mixer.Sound(path)]
+                    print(f"  ✅ {name}: {fname}")
+                except Exception as e:
+                    print(f"  ❌ {name}: {e}")
+            else:
+                print(f"  ⚠️ {name}: {fname} not found")
+    
+    return loaded
 
 # ── 语音识别线程 ────────────────────────────────────────
 def voice_recognition_loop():
@@ -442,16 +393,12 @@ def main():
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 14)
     
-    # 生成所有音效
+    # 加载音效文件
     sounds = {}
     if sound_enabled:
-        print("[INFO] 生成音效...")
-        sounds["poyo"] = [gen_poyo() for _ in range(4)]
-        sounds["happy"] = [gen_happy_melody() for _ in range(3)]
-        sounds["inhale"] = [gen_inhale() for _ in range(2)]
-        sounds["hurt"] = [gen_hurt() for _ in range(2)]
-        sounds["pet"] = [gen_pet_purr() for _ in range(2)]
-        print("[INFO] 音效就绪")
+        print("[INFO] 加载音效...")
+        sounds = load_sounds()
+        print(f"[INFO] 已加载 {len(sounds)} 个音效")
     
     # 启动摄像头线程
     t_cam = threading.Thread(target=camera_detection_loop, daemon=True)
