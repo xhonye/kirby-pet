@@ -85,27 +85,42 @@ def make_hum_sound(freq, duration=0.3):
     sound = pygame.sndarray.make_sound(stereo)
     return sound
 
-# ── MediaPipe 人脸检测线程 ──────────────────────────────
+# ── MediaPipe 人脸检测线程（含调试窗口）──────────────
+camera_status = "init"       # "init" / "opened" / "failed" / "no_face" / "tracking"
+camera_debug_frame = None    # numpy array for debug window
+detection_count = 0
+
 def face_detection_loop():
-    global face_x, face_y, last_face_time
+    global face_x, face_y, last_face_time, camera_status
+    global camera_debug_frame, detection_count
     
     mp_face = mp.solutions.face_detection
+    mp_draw = mp.solutions.drawing_utils
+    
+    print("[INFO] 正在打开摄像头...")
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        print("[WARN] 摄像头未打开，眼睛将随机游走")
+        camera_status = "failed"
+        print("[ERROR] 摄像头未打开！检查是否被其他程序占用")
         return
     
+    camera_status = "opened"
     print("[INFO] 摄像头已打开，开始人脸检测")
-    with mp_face.FaceDetection(model_selection=0, min_detection_confidence=0.5) as fd:
+    print("[INFO] 按 Q 关闭调试窗口")
+    
+    with mp_face.FaceDetection(model_selection=0, min_detection_confidence=0.4) as fd:
         while True:
             ret, frame = cap.read()
             if not ret:
+                camera_status = "failed"
                 time.sleep(0.1)
                 continue
             
             small = cv2.resize(frame, (320, 240))
             rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
             result = fd.process(rgb)
+            
+            debug = small.copy()
             
             if result.detections:
                 det = result.detections[0]
@@ -115,11 +130,35 @@ def face_detection_loop():
                 face_x = cx
                 face_y = cy
                 last_face_time = time.time()
+                detection_count += 1
+                camera_status = "tracking"
+                
+                # 画检测框
+                h, w, _ = debug.shape
+                x1 = int(bbox.xmin * w)
+                y1 = int(bbox.ymin * h)
+                x2 = int((bbox.xmin + bbox.width) * w)
+                y2 = int((bbox.ymin + bbox.height) * h)
+                cv2.rectangle(debug, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(debug, f"TRACKING", (x1, y1 - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                cv2.putText(debug, f"face=({cx:.2f},{cy:.2f})", (5, 225),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
             else:
                 face_x = None
                 face_y = None
+                camera_status = "no_face"
+                cv2.putText(debug, "NO FACE", (10, 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
             
-            time.sleep(0.05)
+            camera_debug_frame = debug
+            
+            # 调试窗口
+            cv2.imshow("Kirby Debug - Camera", debug)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            
+            time.sleep(0.03)
 
 # ── 绘制眼睛 ────────────────────────────────────────────
 def draw_eyes(screen, eye_open_ratio=1.0):
@@ -153,8 +192,29 @@ def draw_eyes(screen, eye_open_ratio=1.0):
 
 # ── 状态文字 ────────────────────────────────────────────
 def draw_state(screen, font, state_text, fps_val):
+    # 顶部状态
     text = font.render(f"{state_text}  FPS:{fps_val:.0f}", True, (100, 100, 120))
     screen.blit(text, (10, 10))
+    
+    # 底部摄像头状态
+    cam_colors = {
+        "init": (180, 180, 100),   # 黄
+        "opened": (100, 180, 100), # 浅绿
+        "failed": (255, 80, 80),   # 红
+        "no_face": (180, 130, 80), # 橙
+        "tracking": (80, 220, 80), # 绿
+    }
+    cam_labels = {
+        "init": "CAM: initializing...",
+        "opened": "CAM: opened, waiting...",
+        "failed": "CAM: FAILED (check camera)",
+        "no_face": "CAM: no face detected",
+        "tracking": f"CAM: tracking (#{detection_count})",
+    }
+    cam_color = cam_colors.get(camera_status, (100, 100, 100))
+    cam_label = cam_labels.get(camera_status, f"CAM: {camera_status}")
+    cam_text = font.render(cam_label, True, cam_color)
+    screen.blit(cam_text, (10, HEIGHT - 25))
 
 # ── 主循环 ──────────────────────────────────────────────
 def main():
@@ -165,7 +225,7 @@ def main():
     pygame.init()
     sound_enabled = False
     try:
-        pygame.mixer.init(frequency=SAMPLE_RATE, size=-16, channels=1)
+        pygame.mixer.init(frequency=SAMPLE_RATE, size=-16, channels=2)
         sound_enabled = True
     except pygame.error as e:
         print(f"[WARN] 音频初始化失败: {e}, 静音模式运行")
