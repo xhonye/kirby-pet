@@ -256,7 +256,7 @@ def camera_detection_loop():
                     cv2.circle(debug, (tx, ty), 4, (255, 200, 0), -1)
                     cv2.circle(debug, (ix, iy), 4, (255, 200, 0), -1)
                     cv2.line(debug, (tx, ty), (ix, iy), (255, 200, 0), 1)
-                            pinch_label = "PINCH" if dist < PINCH_THRESHOLD else f"pinch:{dist:.2f}"
+                    pinch_label = "PINCH" if dist < PINCH_THRESHOLD else f"pinch:{dist:.2f}"
                     cv2.putText(debug, pinch_label, (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 200, 255) if dist < PINCH_THRESHOLD else (200, 200, 200), 1)
                     
                     # 捏合状态机
