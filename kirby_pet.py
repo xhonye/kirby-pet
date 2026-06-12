@@ -131,7 +131,7 @@ def voice_recognition_loop():
     
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
-    print("[INFO] 语音识别启动，喊"卡比"试试！")
+    print("[INFO] 语音识别启动，喊卡比试试！")
     
     with mic as source:
         recognizer.adjust_for_ambient_noise(source, duration=1)
