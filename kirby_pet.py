@@ -94,11 +94,11 @@ def load_sounds():
     loaded = {}
     
     sound_map = {
-        "poyo": ["poyo.mp3"],
-        "happy": ["happy.mp3"],
-        "inhale": ["inhale.mp3"],
-        "hurt": ["hurt.mp3"],
-        "pet": ["pet.mp3"],
+        "poyo": ["poyo.wav", "poyo.mp3"],
+        "happy": ["happy.wav", "happy.mp3"],
+        "inhale": ["inhale.wav", "inhale.mp3"],
+        "hurt": ["hurt.wav", "hurt.mp3"],
+        "pet": ["pet.wav", "pet.mp3"],
     }
     
     for name, files in sound_map.items():
