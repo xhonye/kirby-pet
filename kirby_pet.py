@@ -57,9 +57,10 @@ SNOOZE_EYE_H = 20
 SAMPLE_RATE = 22050
 RANDOM_SOUND_INTERVAL = (6, 18)
 
-# 手势检测
-PINCH_THRESHOLD = 0.06           # 捏合距离阈值（归一化坐标）
-RELEASE_THRESHOLD = 0.12         # 释放距离阈值
+# 手势检测（手掌摇晃 = pet）
+PALM_HISTORY_LEN = 15            # 记录最近 N 帧手掌位置
+SHAKE_THRESHOLD = 0.08           # 摇晃距离阈值（归一化坐标）
+SHAKE_MIN_COUNT = 3              # 最少方向变换次数才算摇晃
 GESTURE_COOLDOWN = 2.0           # 两次 pet 间隔
 
 # ── 全局状态 ────────────────────────────────────────────
@@ -81,7 +82,7 @@ mouth_target = 0.0
 mouth_event_until = 0
 
 # 手势状态
-pinching = False                 # 当前是否在捏合
+palm_history = []                # 手掌位置历史 [(x,y,timestamp), ...]
 pet_cooldown_until = 0           # pet 冷却
 eye_pet_close_until = 0          # pet 时闭眼
 
@@ -122,17 +123,31 @@ def load_sounds():
 
 # ── 语音识别线程 ────────────────────────────────────────
 def voice_recognition_loop():
+    """语音识别：监听麦克风，检测到喊"卡比"时触发回应
+    使用 Google Web Speech API（免费，需联网）"""
     global voice_wake_until, mouth_event_until
     try:
         import speech_recognition as sr
     except ImportError:
         print("[WARN] speech_recognition 未安装，语音功能禁用")
+        print("[WARN] 运行: pip install SpeechRecognition pyaudio")
         return
     
     recognizer = sr.Recognizer()
-    mic = sr.Microphone()
-    print("[INFO] 语音识别启动，喊卡比试试！")
+    recognizer.energy_threshold = 300       # 音量阈值
+    recognizer.dynamic_energy_threshold = True
+    recognizer.pause_threshold = 0.8        # 停顿判定
     
+    try:
+        mic = sr.Microphone()
+    except Exception as e:
+        print(f"[WARN] 麦克风不可用: {e}")
+        return
+    
+    print("[INFO] 语音识别启动（Google API）")
+    print("[INFO] 喊卡比试试！")
+    
+    # 校准环境噪音
     with mic as source:
         recognizer.adjust_for_ambient_noise(source, duration=1)
     
@@ -140,28 +155,37 @@ def voice_recognition_loop():
         try:
             with mic as source:
                 audio = recognizer.listen(source, timeout=5, phrase_time_limit=3)
+            
             text = recognizer.recognize_google(audio, language="zh-CN")
             print(f"[VOICE] {text}")
-            if "卡比" in text or "卡逼" in text or "科比" in text:
+            
+            # 模糊匹配各种发音
+            keywords = ["卡比", "卡逼", "科比", "卡币", "咖比", "kabi", "kirby"]
+            if any(kw in text.lower() for kw in keywords):
                 print("[VOICE] ★ 呼唤卡比！")
                 voice_wake_until = time.time() + 2.0
                 mouth_event_until = time.time() + 1.5
+                
         except sr.WaitTimeoutError:
             pass
         except sr.UnknownValueError:
             pass
         except sr.RequestError as e:
-            print(f"[WARN] 语音服务错误: {e}")
+            print(f"[WARN] Google 语音服务错误: {e}")
+            print("[WARN] 检查网络连接，或等待一会儿重试")
+            time.sleep(5)
+        except OSError as e:
+            print(f"[ERROR] 麦克风错误: {e}")
             time.sleep(3)
         except Exception as e:
-            print(f"[WARN] 语音异常: {e}")
+            print(f"[WARN] 语音异常: {type(e).__name__}: {e}")
             time.sleep(1)
 
 # ── 摄像头检测线程（人脸+手势）──────────────────────────
 def camera_detection_loop():
     global face_x, face_y, last_face_time, camera_status
     global camera_debug_frame, detection_count
-    global pinching, pet_cooldown_until, eye_pet_close_until
+    global palm_history, pet_cooldown_until, eye_pet_close_until
     
     import mediapipe as mp_lib
     from mediapipe.tasks import python as mp_python
@@ -207,7 +231,6 @@ def camera_detection_loop():
     camera_status = "opened"
     print("[INFO] 摄像头已打开 | 按 Q 关闭调试窗口")
     
-    was_pinching = False
     
     while True:
         ret, frame = cap.read()
@@ -256,30 +279,10 @@ def camera_detection_loop():
                     cv2.circle(debug, (tx, ty), 4, (255, 200, 0), -1)
                     cv2.circle(debug, (ix, iy), 4, (255, 200, 0), -1)
                     cv2.line(debug, (tx, ty), (ix, iy), (255, 200, 0), 1)
-                    pinch_label = "PINCH" if dist < PINCH_THRESHOLD else f"pinch:{dist:.2f}"
-                    cv2.putText(debug, pinch_label, (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 200, 255) if dist < PINCH_THRESHOLD else (200, 200, 200), 1)
                     
                     # 捏合状态机
-                    if dist < PINCH_THRESHOLD:
-                        if not was_pinching:
-                            cv2.putText(debug, "PINCH!", (tx, ty - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
-                        was_pinching = True
-                    elif was_pinching and dist > RELEASE_THRESHOLD:
-                        # 捏合后展开 = pet 手势
-                        was_pinching = False
-                        if now > pet_cooldown_until:
-                            print("[GESTURE] ★ Pet! (pinch-release)")
-                            eye_pet_close_until = now + 1.5
-                            pet_cooldown_until = now + GESTURE_COOLDOWN
-                            cv2.putText(debug, "PET!", (120, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-                    elif dist > RELEASE_THRESHOLD * 2:
-                        was_pinching = False
-                else:
-                    was_pinching = False
-        else:
             face_x, face_y = None, None
             camera_status = "no_face"
-            was_pinching = False
             cv2.putText(debug, "NO FACE", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
         
         camera_debug_frame = debug
