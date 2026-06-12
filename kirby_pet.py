@@ -79,10 +79,10 @@ def make_hum_sound(freq, duration=0.3):
     if decay > 0:
         env[-decay:] = np.linspace(1, 0, decay)
     wave_data *= env * 0.4
-    # 转 int16
+    # 转 int16，立体声
     samples = (wave_data * 32767).astype(np.int16)
-    # 立体声？不，单声道就够
-    sound = pygame.sndarray.make_sound(samples)
+    stereo = np.column_stack((samples, samples))
+    sound = pygame.sndarray.make_sound(stereo)
     return sound
 
 # ── MediaPipe 人脸检测线程 ──────────────────────────────
