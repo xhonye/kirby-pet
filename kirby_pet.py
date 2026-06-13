@@ -100,10 +100,10 @@ detection_count = 0
 
 # ── 音效加载 ────────────────────────────────────────────
 def load_sounds():
-    """只加载 Kirby 游戏原声（按编号）"""
+    """加载猫咪音效"""
     import glob
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    kirby_dir = os.path.join(script_dir, "sounds", "Kirby")
+    cat_dir = os.path.join(script_dir, "sounds", "cat")
     loaded = {}
     
     def load_one(path):
@@ -113,26 +113,26 @@ def load_sounds():
             print(f"  ❌ load failed: {path}: {e}")
             return None
     
-    # 严格按编号映射
+    # 猫咪音效映射
     sound_map = {
-        "pet":   [f"{n:02d}" for n in range(8, 10)],    # 08-09
-        "sleep": [f"{n:02d}" for n in range(19, 22)],   # 19-21
-        "hi":    [f"{n:02d}" for n in range(22, 29)],   # 22-28
+        "purr": ["purr_01.mp3", "purr_02.mp3"],      # 呼噜（被摸/满足）
+        "meow": ["meow_01.mp3", "meow_02.mp3", "meow_03.mp3"],  # 喵叫（打招呼/回应）
+        "hiss": ["hiss_01.mp3", "hiss_02.mp3"],      # 嘶嘶（惊吓/不爽）
     }
     
-    for name, prefixes in sound_map.items():
+    for name, files in sound_map.items():
         sounds = []
-        for prefix in prefixes:
-            pat = os.path.join(kirby_dir, f"{prefix}_*.wav")
-            for f in sorted(glob.glob(pat)):
-                s = load_one(f)
+        for fname in files:
+            path = os.path.join(cat_dir, fname)
+            if os.path.exists(path):
+                s = load_one(path)
                 if s:
                     sounds.append(s)
         if sounds:
             loaded[name] = sounds
-            print(f"  ✅ {name}: {len(sounds)} sounds ({', '.join(prefixes)})")
+            print(f"  ✅ {name}: {len(sounds)} sounds")
         else:
-            print(f"  ⚠️ {name}: no sounds found for {prefixes}")
+            print(f"  ⚠️ {name}: no sounds found")
     
     return loaded
 
@@ -175,7 +175,7 @@ def voice_recognition_loop():
             print(f"[VOICE] {text}")
             
             # 模糊匹配打招呼
-            hi_keywords = ["hi", "嗨", "嘿", "hello", "你好", "哈喽", "hey"]
+            hi_keywords = ["hi", "嗨", "嘿", "hello", "你好", "哈喽", "hey", "猫咪", "猫猫", "喵"]
             if any(kw in text.lower() for kw in hi_keywords):
                 print("[VOICE] ★ 打招呼！")
                 voice_wake_until = time.time() + 2.0
@@ -183,10 +183,10 @@ def voice_recognition_loop():
                 # 标记为 hi 事件，播放 hi 音效
                 voice_event_type = "hi"
             
-            # 模糊匹配呼唤卡比
-            kirby_keywords = ["卡比", "卡逼", "科比", "卡币", "咖比", "kabi", "kirby"]
+            # 模糊匹配叫猫咪
+            kirby_keywords = ["猫咪", "猫猫", "小猫", "喵", "cat", "kitty"]
             if any(kw in text.lower() for kw in kirby_keywords):
-                print("[VOICE] ★ 呼唤卡比！")
+                print("[VOICE] ★ 叫猫咪！")
                 voice_wake_until = time.time() + 2.0
                 mouth_event_until = time.time() + 1.5
                 voice_event_type = "hi"  # 卡比也用 hi 音效回应
@@ -583,7 +583,7 @@ def main():
         print(f"[WARN] 音频失败: {e}")
     
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Kirby Pet")
+    pygame.display.set_caption("Cat Pet")
     try:
         import ctypes
         hwnd = pygame.display.get_wm_info()["window"]
@@ -659,8 +659,8 @@ def main():
             eye_open += ((SNOOZE_EYE_H / EYE_H) - eye_open) * dt * 2
             # 睡觉时播放打哈欠音效
             if not hasattr(main, '_sleep_sound_played') or not main._sleep_sound_played:
-                if sound_enabled and sounds.get("sleep"):
-                    s = random.choice(sounds["sleep"])
+                if sound_enabled and sounds.get("purr"):
+                    s = random.choice(sounds["purr"])
                     s.set_volume(0.3)
                     s.play()
                     main._sleep_sound_played = True
@@ -679,8 +679,8 @@ def main():
         
         # pet 时发声 + 冒爱心
         if now < eye_pet_close_until and now > eye_pet_close_until - 1.4:
-            if sound_enabled and sounds.get("pet"):
-                s = random.choice(sounds["pet"])
+            if sound_enabled and sounds.get("purr"):
+                s = random.choice(sounds["purr"])
                 s.set_volume(0.5)
                 s.play()
             spawn_hearts(6)
@@ -688,12 +688,12 @@ def main():
         
         # 语音唤醒发声
         if now < voice_wake_until and now > voice_wake_until - 1.9 and sound_enabled:
-            if voice_event_type == "hi" and sounds.get("hi"):
-                s = random.choice(sounds["hi"])
+            if voice_event_type == "hi" and sounds.get("meow"):
+                s = random.choice(sounds["meow"])
                 s.set_volume(0.6)
                 s.play()
-            elif sounds.get("poyo"):
-                s = random.choice(sounds["poyo"])
+            elif sounds.get("meow"):
+                s = random.choice(sounds["meow"])
                 s.set_volume(0.5)
                 s.play()
             voice_wake_until = now - 1
@@ -702,7 +702,7 @@ def main():
         # 随机声音
         next_random_sound -= dt
         if next_random_sound <= 0 and sound_enabled:
-            pool = random.choice(["hi", "hi", "hi"])
+            pool = random.choice(["meow", "meow", "purr"])
             if sounds.get(pool):
                 s = random.choice(sounds[pool])
                 s.set_volume(random.uniform(0.2, 0.4))
