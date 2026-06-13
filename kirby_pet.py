@@ -500,8 +500,7 @@ _hearts = []  # [(x, y, vx, vy, life, max_life), ...]
 
 def spawn_hearts(count=5):
     """在卡比头顶生成爱心粒子"""
-    import random
-import datetime as _r
+    import random as _r
     for _ in range(count):
         x = WIDTH // 2 + _r.randint(-60, 60)
         y = EYE_Y - 80 + _r.randint(-20, 10)
