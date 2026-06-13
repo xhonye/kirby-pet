@@ -437,7 +437,7 @@ def draw_cat_face(screen, eye_open_ratio=1.0):
             pygame.draw.ellipse(screen, EYE_COLOR, eye_rect)
             pygame.draw.ellipse(screen, (200, 200, 220), eye_rect, 2)
             
-            if eye_open_ratio > 0.25:
+            if eye_open_ratio > 0.15:
                 # 蓝色虹膜
                 iris_w = int(w * 0.65)
                 iris_h = int(h * 0.7)
@@ -534,6 +534,7 @@ def draw_mouth(screen, open_ratio):
 
 # ── 爱心粒子系统 ─────────────────────────────────────────
 _hearts = []  # [(x, y, vx, vy, life, max_life), ...]
+_blush_until = 0  # 腮红显示截止时间
 
 def spawn_hearts(count=5):
     """在卡比头顶生成爱心粒子"""
@@ -726,13 +727,13 @@ def main():
         elif is_blinking:
             eye_open = max(0.05, eye_open - dt * 15)
         elif state == "sleeping":
-            eye_open += ((SNOOZE_EYE_H / EYE_H) - eye_open) * dt * 2
+            eye_open += ((SNOOZE_EYE_H / EYE_H) - eye_open) * min(1, dt * 1.5)
             # 睡觉时播放打哈欠音效
             if not hasattr(main, '_sleep_sound_played') or not main._sleep_sound_played:
                 play_cat_sound("purr", 0.3, "😴睡觉")
                 main._sleep_sound_played = True
         else:
-            eye_open += (1.0 - eye_open) * dt * 10
+            eye_open += (1.0 - eye_open) * min(1, dt * 3)
             if hasattr(main, '_sleep_sound_played'):
                 main._sleep_sound_played = False
         
@@ -748,6 +749,7 @@ def main():
         if now < eye_pet_close_until and now > eye_pet_close_until - 1.4:
             play_cat_sound("purr", 0.5, "🖐️抚摸")
             spawn_hearts(6)
+            _blush_until = now + 3.0
             eye_pet_close_until = now - 1
         
         # 语音唤醒发声
