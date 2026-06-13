@@ -61,7 +61,8 @@ RANDOM_SOUND_INTERVAL = (40, 90)
 PALM_HISTORY_LEN = 15            # 记录最近 N 帧手掌位置
 SHAKE_THRESHOLD = 0.08           # 摇晃距离阈值（归一化坐标）
 SHAKE_MIN_COUNT = 3              # 最少方向变换次数才算摇晃
-GESTURE_COOLDOWN = 2.0           # 两次 pet 间隔
+GESTURE_COOLDOWN = 2.0           # pet 音效冷却
+FIST_THRESHOLD = 0.12              # 握拳判定阈值（指尖到掌心距离）
 
 # ── 全局状态 ────────────────────────────────────────────
 face_x = None
@@ -85,6 +86,7 @@ mouth_event_until = 0
 palm_history = []                # 手掌位置历史 [(x,y,timestamp), ...]
 pet_cooldown_until = 0           # pet 冷却
 eye_pet_close_until = 0          # pet 时闭眼
+hiss_cooldown_until = 0           # 惊吓音效冷却
 
 # 语音唤醒状态
 voice_wake_until = 0
@@ -211,7 +213,7 @@ def voice_recognition_loop():
 def camera_detection_loop():
     global face_x, face_y, last_face_time, camera_status
     global camera_debug_frame, detection_count
-    global palm_history, pet_cooldown_until, eye_pet_close_until
+    global palm_history, pet_cooldown_until, eye_pet_close_until, hiss_cooldown_until
     
     import mediapipe as mp_lib
     from mediapipe.tasks import python as mp_python
@@ -328,8 +330,33 @@ def camera_detection_loop():
                         cv2.putText(debug, shake_label, (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
                         
                         if total_changes >= SHAKE_MIN_COUNT and total_dist > SHAKE_THRESHOLD:
-                            if now > pet_cooldown_until:
-                                print(f"[GESTURE] Pet! (shake {total_changes}x)")
+                            # 检测是否握拳（指尖靠近掌心）
+                            palm_center = hand[0]  # 手腕
+                            finger_tips = [hand[4], hand[8], hand[12], hand[16], hand[20]]
+                            avg_tip_dist = sum(
+                                math.sqrt((t.x - palm_center.x)**2 + (t.y - palm_center.y)**2)
+                                for t in finger_tips
+                            ) / len(finger_tips)
+                            
+                            is_fist = avg_tip_dist < FIST_THRESHOLD
+                            
+                            if is_fist and now > hiss_cooldown_until:
+                                # 握拳摇晃 → 惊吓/低吼
+                                print(f"[GESTURE] Fist shake! (dist={avg_tip_dist:.2f})")
+                                if sound_enabled and sounds.get("hiss"):
+                                    s = random.choice(sounds["hiss"])
+                                    s.set_volume(0.5)
+                                    s.play()
+                                elif sound_enabled and sounds.get("growl"):
+                                    s = random.choice(sounds["growl"])
+                                    s.set_volume(0.5)
+                                    s.play()
+                                hiss_cooldown_until = now + 2.0
+                                palm_history.clear()
+                                cv2.putText(debug, "HISS!", (120, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 100, 255), 2)
+                            elif not is_fist and now > pet_cooldown_until:
+                                # 张手摇晃 → pet 抚摸
+                                print(f"[GESTURE] Pet! (open hand)")
                                 eye_pet_close_until = now + 1.5
                                 pet_cooldown_until = now + GESTURE_COOLDOWN
                                 palm_history.clear()
