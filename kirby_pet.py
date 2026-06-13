@@ -27,11 +27,15 @@ FPS = 60
 
 # 猫咪参数
 FACE_COLOR = (255, 220, 180)     # 猫咪脸蛋颜色（暖米色）
+FACE_SHADOW = (230, 190, 150)     # 脸部阴影色
 EAR_COLOR = (255, 200, 160)      # 耳朵外色
 EAR_INNER_COLOR = (255, 150, 160) # 耳朵内粉色
+EAR_TUFT_COLOR = (255, 230, 200)  # 耳尖绒毛
 NOSE_COLOR = (255, 140, 150)     # 鼻子粉色
 WHISKER_COLOR = (200, 200, 200)  # 胡须颜色
 PAW_COLOR = (255, 210, 170)      # 爪子颜色
+PAW_PAD_COLOR = (220, 140, 140)  # 肉垫颜色
+TAIL_COLOR = (255, 210, 170)     # 尾巴颜色
 
 EYE_COLOR = (255, 255, 255)      # 眼白
 IRIS_COLOR = (80, 180, 80)       # 绿色虹膜（猫经典色）
@@ -420,57 +424,156 @@ def camera_detection_loop():
 _breath_t = 0.0
 
 def draw_cat_face(screen, eye_open_ratio=1.0):
-    global _breath_t
+    """画猫咪脸 v5：圆脸 + 大耳 + 猫眼 + 鼻子 + 嘴 + 胡须 + 尾巴"""
+    global _breath_t, _whisker_t, _tail_t, _ear_tilt, _ear_target
     _breath_t += 0.03
-    breath_scale = 1.0 + 0.012 * math.sin(_breath_t * 1.5)  # 微小呼吸缩放
-    
+    _whisker_t += 0.04
+    _tail_t += 0.02
+    breath_scale = 1.0 + 0.015 * math.sin(_breath_t * 1.5)
+
+    cx = WIDTH // 2
+    face_y = EYE_Y + 25
+
+    # ── 耳朵倾斜动画（偶尔动一下）──
+    for i in range(2):
+        if random.random() < 0.005:
+            _ear_target[i] = random.uniform(-8, 8)
+        _ear_tilt[i] += (_ear_target[i] - _ear_tilt[i]) * 0.05
+
+    # ── 耳朵（大三角，带绒毛）──
+    for idx, side in enumerate([-1, 1]):
+        ear_cx = cx + side * 100
+        tilt = _ear_tilt[idx]
+        pts_outer = [
+            (ear_cx + side * 5 + tilt, EAR_Y),
+            (ear_cx - EAR_W - 3, EAR_Y + EAR_H + 8),
+            (ear_cx + EAR_W + 3, EAR_Y + EAR_H + 8),
+        ]
+        pygame.draw.polygon(screen, EAR_COLOR, pts_outer)
+        iw = int(EAR_W * 0.55)
+        pts_inner = [
+            (ear_cx + side * 3 + tilt, EAR_Y + 14),
+            (ear_cx - iw, EAR_Y + EAR_H + 2),
+            (ear_cx + iw, EAR_Y + EAR_H + 2),
+        ]
+        pygame.draw.polygon(screen, EAR_INNER_COLOR, pts_inner)
+        # 耳尖绒毛
+        for j in range(3):
+            fx = ear_cx + side * 2 + tilt + random.randint(-3, 3)
+            fy = EAR_Y + 2 + j * 3
+            pygame.draw.line(screen, EAR_TUFT_COLOR, (fx, fy), (fx + side * 4, fy - 5), 1)
+
+    # ── 脸型（椭圆 + 底部阴影）──
+    face_rx, face_ry = 125, 110
+    face_rect = pygame.Rect(0, 0, face_rx * 2, face_ry * 2)
+    face_rect.center = (cx, face_y)
+    pygame.draw.ellipse(screen, FACE_COLOR, face_rect)
+    # 底部渐变阴影
+    shadow_surf = pygame.Surface((face_rx * 2, face_ry), pygame.SRCALPHA)
+    for row in range(face_ry):
+        alpha = int(35 * (row / face_ry))
+        pygame.draw.line(shadow_surf, (180, 140, 100, alpha), (0, row), (face_rx * 2, row))
+    screen.blit(shadow_surf, (cx - face_rx, face_y))
+    pygame.draw.ellipse(screen, (235, 200, 160), face_rect, 2)
+
+    # ── 额头 M 形花纹 ──
+    mark_color = (235, 200, 160)
+    mark_y = face_y - face_ry + 35
+    pygame.draw.lines(screen, mark_color, False,
+                      [(cx - 5, mark_y + 18), (cx - 30, mark_y + 2), (cx - 58, mark_y + 20)], 3)
+    pygame.draw.lines(screen, mark_color, False,
+                      [(cx + 5, mark_y + 18), (cx + 30, mark_y + 2), (cx + 58, mark_y + 20)], 3)
+
+    # ── 眼睛（大猫眼 + 绿色渐变虹膜 + 竖瞳）──
     for ex in [EYE_LEFT_X, EYE_RIGHT_X]:
         if eye_open_ratio < 0.2:
-            # 月牙眯眼笑（被摸时）
-            draw_crescent_eye(screen, ex, EYE_Y, int(EYE_W * 0.7))
+            draw_crescent_eye(screen, ex, EYE_Y, int(EYE_W * 0.9))
         else:
-            # 正常眼睛
-            w = int(EYE_W * breath_scale)
-            h = max(5, int(EYE_H * eye_open_ratio * breath_scale))
+            w = int(EYE_W * breath_scale * 1.1)
+            h = max(4, int(EYE_H * eye_open_ratio * breath_scale * 1.1))
             eye_rect = pygame.Rect(0, 0, w, h)
             eye_rect.center = (ex, EYE_Y)
             pygame.draw.ellipse(screen, EYE_COLOR, eye_rect)
-            pygame.draw.ellipse(screen, (200, 200, 220), eye_rect, 2)
-            
+            pygame.draw.ellipse(screen, (50, 50, 70), eye_rect, 2)
+
             if eye_open_ratio > 0.15:
-                # 蓝色虹膜
-                iris_w = int(w * 0.65)
-                iris_h = int(h * 0.7)
-                iris_rect = pygame.Rect(0, 0, iris_w, iris_h)
                 ix = ex + int(pupil_offset[0] * PUPIL_TRACK_RANGE)
                 iy = EYE_Y + int(pupil_offset[1] * PUPIL_TRACK_RANGE * 0.5)
+                iris_w = int(w * 0.72)
+                iris_h = int(h * 0.88)
+                iris_rect = pygame.Rect(0, 0, iris_w, iris_h)
                 iris_rect.center = (ix, iy)
                 pygame.draw.ellipse(screen, IRIS_COLOR, iris_rect)
-                
-                # 深色瞳孔
-                pr = max(3, int(iris_w * 0.35 * eye_open_ratio))
-                pygame.draw.circle(screen, PUPIL_COLOR, (ix, iy), pr)
-                
-                # 多层高光
-                # 大高光（左上）
-                hx1 = ix - int(pr * 0.5)
-                hy1 = iy - int(pr * 0.5)
-                hr1 = max(3, int(pr * 0.45))
-                pygame.draw.circle(screen, HIGHLIGHT_COLOR, (hx1, hy1), hr1)
-                # 小高光（右下）
-                hx2 = ix + int(pr * 0.3)
-                hy2 = iy + int(pr * 0.35)
-                hr2 = max(2, int(pr * 0.2))
-                pygame.draw.circle(screen, (255, 255, 255, 180), (hx2, hy2), hr2)
-    
-    # 腮红（呼吸动画）
-    blush_y = EYE_Y + 45
-    blush_w = int(50 * breath_scale)
-    blush_h = int(25 * breath_scale)
-    blush_surf = pygame.Surface((blush_w, blush_h), pygame.SRCALPHA)
-    pygame.draw.ellipse(blush_surf, BLUSH_COLOR, (0, 0, blush_w, blush_h))
-    screen.blit(blush_surf, (EYE_LEFT_X - 75, blush_y))
-    screen.blit(blush_surf, (EYE_RIGHT_X + 25, blush_y))
+                # 虹膜内圈（更亮）
+                inner_rect = pygame.Rect(0, 0, int(iris_w * 0.6), int(iris_h * 0.6))
+                inner_rect.center = (ix, iy)
+                pygame.draw.ellipse(screen, (100, 200, 100), inner_rect)
+                # 竖瞳
+                pw = max(3, int(iris_w * 0.18))
+                ph = max(5, int(iris_h * 0.8 * eye_open_ratio))
+                pupil_rect = pygame.Rect(0, 0, pw, ph)
+                pupil_rect.center = (ix, iy)
+                pygame.draw.ellipse(screen, PUPIL_COLOR, pupil_rect)
+                # 大高光
+                hx = ix - int(iris_w * 0.2)
+                hy = iy - int(iris_h * 0.25)
+                hr = max(4, int(iris_w * 0.15))
+                pygame.draw.circle(screen, HIGHLIGHT_COLOR, (hx, hy), hr)
+                # 小高光
+                hx2 = ix + int(iris_w * 0.15)
+                hy2 = iy + int(iris_h * 0.2)
+                hr2 = max(2, int(iris_w * 0.08))
+                pygame.draw.circle(screen, (255, 255, 255, 200), (hx2, hy2), hr2)
+
+    # ── 腮红（被摸后短暂显示，带淡出）──
+    if time.time() < _blush_until:
+        remaining = _blush_until - time.time()
+        blush_alpha = int(120 * min(1, remaining))
+        blush_y = EYE_Y + 48
+        blush_w = int(32 * breath_scale)
+        blush_h = int(16 * breath_scale)
+        blush_surf = pygame.Surface((blush_w, blush_h), pygame.SRCALPHA)
+        pygame.draw.ellipse(blush_surf, (255, 150, 160, blush_alpha), (0, 0, blush_w, blush_h))
+        screen.blit(blush_surf, (EYE_LEFT_X - 55, blush_y))
+        screen.blit(blush_surf, (EYE_RIGHT_X + 23, blush_y))
+
+    # ── 鼻子（粉色倒三角 + 光泽）──
+    nose_pts = [
+        (cx, NOSE_Y - NOSE_SIZE // 2 + 2),
+        (cx - NOSE_SIZE + 2, NOSE_Y + NOSE_SIZE // 2),
+        (cx + NOSE_SIZE - 2, NOSE_Y + NOSE_SIZE // 2),
+    ]
+    pygame.draw.polygon(screen, NOSE_COLOR, nose_pts)
+    pygame.draw.ellipse(screen, (255, 190, 195), (cx - 4, NOSE_Y - 3, 6, 4))
+
+    # ── 嘴巴线 ──
+    pygame.draw.line(screen, MOUTH_COLOR, (cx, NOSE_Y + NOSE_SIZE // 2 - 1), (cx, MOUTH_Y), 2)
+
+    # ── 胡须（3 根每侧，呼吸微动）──
+    whisker_breath = math.sin(_whisker_t) * 2
+    for side in [-1, 1]:
+        for i, dy in enumerate([-8, 0, 8]):
+            wx_start = cx + side * 28
+            wy_start = NOSE_Y + 12 + dy
+            wx_end = cx + side * 118
+            wy_end = NOSE_Y + 6 + dy + (i - 1) * 5 + whisker_breath
+            pygame.draw.line(screen, WHISKER_COLOR, (wx_start, wy_start), (wx_end, wy_end), 2)
+            mid_x = (wx_start + wx_end) // 2
+            mid_y = (wy_start + wy_end) // 2
+            pygame.draw.line(screen, (220, 220, 220), (mid_x, mid_y), (wx_end, wy_end), 1)
+
+    # ── 尾巴（右侧摆动）──
+    tail_cx = cx + face_rx + 10
+    tail_y = face_y + 40
+    tail_swing = math.sin(_tail_t * 2) * 15
+    tail_pts = [
+        (tail_cx, tail_y),
+        (tail_cx + 20, tail_y - 30 + tail_swing * 0.3),
+        (tail_cx + 35, tail_y - 55 + tail_swing * 0.7),
+        (tail_cx + 25, tail_y - 75 + tail_swing),
+    ]
+    pygame.draw.lines(screen, TAIL_COLOR, False, tail_pts, 6)
+    pygame.draw.circle(screen, (240, 190, 150), tail_pts[-1], 5)
 
 def draw_crescent_eye(screen, cx, cy, w):
     """月牙形眯眼笑"""
@@ -487,54 +590,66 @@ def draw_crescent_eye(screen, cx, cy, w):
 # ── 绘制嘴巴（圆角倒三角+舌头）──────────────────────────
 _mouth_breathe = 0.0
 
+# ── 绘制嘴巴（猫咪 W 形 + 舌头）──────────────────────────
+_mouth_breathe = 0.0
+
 def draw_mouth(screen, open_ratio):
     global _mouth_breathe
     _mouth_breathe += 0.02
     cx = WIDTH // 2
-    
+
     if open_ratio < 0.15:
-        # 闭嘴：小弧线微笑
-        points = []
-        for i in range(20):
-            t = i / 19.0
-            x = cx - MOUTH_W + t * MOUTH_W * 2
-            y = MOUTH_Y + math.sin(t * math.pi) * 6
-            points.append((x, y))
-        if len(points) >= 2:
-            pygame.draw.lines(screen, MOUTH_COLOR, False, points, 3)
+        # 闭嘴：W 形猫嘴
+        # 中线（鼻下到嘴角）
+        pygame.draw.line(screen, MOUTH_COLOR, (cx, NOSE_Y + 8), (cx, MOUTH_Y + 3), 2)
+        # 左弧
+        pts_l = []
+        for i in range(12):
+            t = i / 11.0
+            x = cx - t * MOUTH_W
+            y = MOUTH_Y + 3 + math.sin(t * math.pi) * 6
+            pts_l.append((x, y))
+        pygame.draw.lines(screen, MOUTH_COLOR, False, pts_l, 2)
+        # 右弧
+        pts_r = []
+        for i in range(12):
+            t = i / 11.0
+            x = cx + t * MOUTH_W
+            y = MOUTH_Y + 3 + math.sin(t * math.pi) * 6
+            pts_r.append((x, y))
+        pygame.draw.lines(screen, MOUTH_COLOR, False, pts_r, 2)
     else:
-        # 张嘴：圆角倒三角
-        w = int(MOUTH_W * (1.0 + 0.5 * open_ratio))
+        # 张嘴：椭圆形
+        w = int(MOUTH_W * (1.0 + 0.6 * open_ratio))
         h = int(MOUTH_H_CLOSED + (MOUTH_H_OPEN - MOUTH_H_CLOSED) * open_ratio)
-        
-        # 深色喉咙（底层）
-        throat_pts = [
-            (cx - w + 4, MOUTH_Y),
-            (cx + w - 4, MOUTH_Y),
-            (cx, MOUTH_Y + h - 2),
-        ]
-        pygame.draw.polygon(screen, (80, 30, 40), throat_pts)
-        
-        # 粉色嘴巴主体
-        mouth_pts = [
-            (cx - w, MOUTH_Y - 2),
-            (cx + w, MOUTH_Y - 2),
-            (cx, MOUTH_Y + h),
-        ]
-        pygame.draw.polygon(screen, MOUTH_COLOR, mouth_pts)
-        
-        # 舌头（张得够大时）
+        # 深色喉咙
+        throat_rect = pygame.Rect(cx - w + 3, MOUTH_Y, (w - 3) * 2, h)
+        pygame.draw.ellipse(screen, (80, 30, 40), throat_rect)
+        # 嘴巴主体
+        mouth_rect = pygame.Rect(cx - w, MOUTH_Y - 2, w * 2, h + 4)
+        pygame.draw.ellipse(screen, MOUTH_COLOR, mouth_rect)
+        # 舌头（圆润，伸出来）
         if open_ratio > 0.4:
-            tw = int(w * 0.45)
-            th = int(h * 0.35)
-            ty = MOUTH_Y + int(h * 0.45)
-            # 圆润舌头
+            tw = int(w * 0.5)
+            th = int(h * 0.4)
+            ty = MOUTH_Y + int(h * 0.35)
             tongue_rect = pygame.Rect(cx - tw, ty, tw * 2, th)
             pygame.draw.ellipse(screen, TONGUE_COLOR, tongue_rect)
+            # 舌头高光
+            shine_rect = pygame.Rect(cx - tw + 3, ty + 2, tw - 3, th // 3)
+            pygame.draw.ellipse(screen, (255, 170, 170), shine_rect)
+        # 中线
+        pygame.draw.line(screen, MOUTH_COLOR, (cx, NOSE_Y + 8), (cx, MOUTH_Y), 2)
 
 # ── 爱心粒子系统 ─────────────────────────────────────────
 _hearts = []  # [(x, y, vx, vy, life, max_life), ...]
 _blush_until = 0  # 腮红显示截止时间
+_whisker_t = 0     # 胡须动画时间
+_tail_t = 0        # 尾巴动画时间
+_ear_tilt = [0, 0] # 耳朵倾斜角度 [左, 右]
+_ear_target = [0, 0]
+_sleep_zzz = []    # [(x, y, life, max_life), ...]
+_pupil_dilation = 1.0  # 瞳孔缩放
 
 def spawn_hearts(count=5):
     """在卡比头顶生成爱心粒子"""
@@ -612,18 +727,30 @@ def draw_hearts(screen, dt):
         _hearts.remove(h)
 
 # ── 头顶小脚丫 ─────────────────────────────────────────
+# ── 猫爪（带肉垫细节）────────────────────────────────────────
 def draw_feet(screen):
-    """卡比头顶标志性小脚丫"""
-    foot_y = EYE_Y - EYE_H - 15
-    foot_color = (220, 60, 80)  # 红色
-    
-    for fx in [WIDTH // 2 - 20, WIDTH // 2 + 12]:
-        # 小椭圆脚掌
-        foot_rect = pygame.Rect(0, 0, 18, 10)
-        foot_rect.center = (fx, foot_y)
-        pygame.draw.ellipse(screen, foot_color, foot_rect)
+    """底部猫爪 + 肉垫"""
+    paw_y = HEIGHT - 50
+    for px in [WIDTH // 2 - 55, WIDTH // 2 + 55]:
+        # 掌心（椭圆）
+        paw_rect = pygame.Rect(0, 0, 34, 24)
+        paw_rect.center = (px, paw_y)
+        pygame.draw.ellipse(screen, PAW_COLOR, paw_rect)
+        # 肉垫（大椭圆）
+        pad_rect = pygame.Rect(0, 0, 14, 11)
+        pad_rect.center = (px, paw_y + 3)
+        pygame.draw.ellipse(screen, PAW_PAD_COLOR, pad_rect)
+        # 小爪尖（3 个圆）
+        for dx in [-11, 0, 11]:
+            tip_rect = pygame.Rect(0, 0, 9, 9)
+            tip_rect.center = (px + dx, paw_y - 11)
+            pygame.draw.ellipse(screen, PAW_COLOR, tip_rect)
+        # 爪尖肉垫
+        for dx in [-11, 0, 11]:
+            tip_pad = pygame.Rect(0, 0, 4, 4)
+            tip_pad.center = (px + dx, paw_y - 10)
+            pygame.draw.ellipse(screen, PAW_PAD_COLOR, tip_pad)
 
-# ── 状态绘制 ────────────────────────────────────────────
 def draw_state(screen, font, state_text, fps_val):
     text = font.render(f"{state_text}  FPS:{fps_val:.0f}", True, (100, 100, 120))
     screen.blit(text, (10, 10))
@@ -728,10 +855,13 @@ def main():
             eye_open = max(0.05, eye_open - dt * 15)
         elif state == "sleeping":
             eye_open += ((SNOOZE_EYE_H / EYE_H) - eye_open) * min(1, dt * 1.5)
-            # 睡觉时播放打哈欠音效
+            # 睡觉时播放打哈欠音效 + ZZZ
             if not hasattr(main, '_sleep_sound_played') or not main._sleep_sound_played:
                 play_cat_sound("purr", 0.3, "😴睡觉")
                 main._sleep_sound_played = True
+            # 持续生成 ZZZ
+            if random.random() < 0.02:
+                spawn_zzz()
         else:
             eye_open += (1.0 - eye_open) * min(1, dt * 3)
             if hasattr(main, '_sleep_sound_played'):
@@ -770,12 +900,19 @@ def main():
             play_cat_sound(pool, random.uniform(0.2, 0.4), "🎲随机")
             next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
         
-        # 绘制
-        screen.fill(BG_COLOR)
+        # 绘制（渐变背景）
+        for row in range(HEIGHT):
+            t = row / HEIGHT
+            r = int(30 + 15 * t)
+            g = int(30 + 10 * t)
+            b = int(40 + 20 * t)
+            pygame.draw.line(screen, (r, g, b), (0, row), (WIDTH, row))
         draw_feet(screen)
         draw_cat_face(screen, eye_open)
         draw_mouth(screen, mouth_open)
         draw_hearts(screen, dt)
+        if state == "sleeping":
+            draw_zzz(screen, dt)
         draw_state(screen, font, state, clock.get_fps())
         pygame.display.flip()
     
