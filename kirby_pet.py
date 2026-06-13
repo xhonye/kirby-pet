@@ -100,57 +100,39 @@ detection_count = 0
 
 # ── 音效加载 ────────────────────────────────────────────
 def load_sounds():
-    """加载音效：优先使用 Kirby 游戏原声，回退到合成音"""
+    """只加载 Kirby 游戏原声（按编号）"""
+    import glob
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    sounds_dir = os.path.join(script_dir, "sounds")
-    kirby_dir = os.path.join(sounds_dir, "Kirby")
+    kirby_dir = os.path.join(script_dir, "sounds", "Kirby")
     loaded = {}
     
     def load_one(path):
         try:
             return pygame.mixer.Sound(path)
-        except Exception:
+        except Exception as e:
+            print(f"  ❌ load failed: {path}: {e}")
             return None
     
-    # 游戏原声映射
-    # 08-09: pet/被摸
-    # 19-21: 睡觉/打哈欠
-    # 22-28: hi/打招呼
-    game_sounds = {
-        "pet": [os.path.join(kirby_dir, f"{n}_0x*.wav") for n in range(8, 10)],
-        "sleep": [os.path.join(kirby_dir, f"{n}_0x*.wav") for n in range(19, 22)],
-        "hi": [os.path.join(kirby_dir, f"{n}_0x*.wav") for n in range(22, 29)],
+    # 严格按编号映射
+    sound_map = {
+        "pet":   [f"{n:02d}" for n in range(8, 10)],    # 08-09
+        "sleep": [f"{n:02d}" for n in range(19, 22)],   # 19-21
+        "hi":    [f"{n:02d}" for n in range(22, 29)],   # 22-28
     }
     
-    import glob
-    for name, patterns in game_sounds.items():
+    for name, prefixes in sound_map.items():
         sounds = []
-        for pat in patterns:
+        for prefix in prefixes:
+            pat = os.path.join(kirby_dir, f"{prefix}_*.wav")
             for f in sorted(glob.glob(pat)):
                 s = load_one(f)
                 if s:
                     sounds.append(s)
         if sounds:
             loaded[name] = sounds
-            print(f"  ✅ {name}: {len(sounds)} game sounds")
-    
-    # 回退合成音
-    fallback_map = {
-        "poyo": ["poyo.wav", "poyo.mp3"],
-        "happy": ["happy.wav", "happy.mp3"],
-        "inhale": ["inhale.wav", "inhale.mp3"],
-        "hurt": ["hurt.wav", "hurt.mp3"],
-    }
-    for name, files in fallback_map.items():
-        if name not in loaded:
-            for fname in files:
-                path = os.path.join(sounds_dir, fname)
-                if os.path.exists(path):
-                    s = load_one(path)
-                    if s:
-                        loaded[name] = [s]
-                        print(f"  ⚡ {name}: {fname} (fallback)")
-                        break
+            print(f"  ✅ {name}: {len(sounds)} sounds ({', '.join(prefixes)})")
+        else:
+            print(f"  ⚠️ {name}: no sounds found for {prefixes}")
     
     return loaded
 
@@ -598,7 +580,7 @@ def main():
         # 随机声音
         next_random_sound -= dt
         if next_random_sound <= 0 and sound_enabled:
-            pool = random.choice(["hi", "poyo", "happy", "inhale"])
+            pool = random.choice(["hi", "hi", "hi"])
             if sounds.get(pool):
                 s = random.choice(sounds[pool])
                 s.set_volume(random.uniform(0.2, 0.4))
