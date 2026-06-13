@@ -419,7 +419,7 @@ def camera_detection_loop():
 # 呼吸动画
 _breath_t = 0.0
 
-def draw_eyes(screen, eye_open_ratio=1.0):
+def draw_cat_face(screen, eye_open_ratio=1.0):
     global _breath_t
     _breath_t += 0.03
     breath_scale = 1.0 + 0.012 * math.sin(_breath_t * 1.5)  # 微小呼吸缩放
