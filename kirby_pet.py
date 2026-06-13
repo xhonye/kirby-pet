@@ -56,7 +56,7 @@ SNOOZE_EYE_H = 20
 
 # 声音
 SAMPLE_RATE = 22050
-RANDOM_SOUND_INTERVAL = (40, 90)
+RANDOM_SOUND_INTERVAL = (60, 120)  # 随机叫声间隔：60-120秒
 
 # 手势检测（手掌摇晃 = pet）
 PALM_HISTORY_LEN = 15            # 记录最近 N 帧手掌位置
@@ -88,7 +88,30 @@ palm_history = []                # 手掌位置历史 [(x,y,timestamp), ...]
 pet_cooldown_until = 0           # pet 冷却
 eye_pet_close_until = 0          # pet 时闭眼
 hiss_cooldown_until = 0           # 惊吓音效冷却
-pet_sound_cooldown_until = 0       # purr 音效冷却
+# 统一音效播放器 — 每个 category 有独立冷却，避免重复叠加
+_last_sound_play = {}              # {category: timestamp}
+SOUND_COOLDOWNS = {                # 各类音效最短间隔（秒）
+    "purr": 4.0,
+    "meow": 3.0,
+    "hiss": 2.0,
+    "growl": 2.0,
+}
+
+def play_cat_sound(category, volume=0.5, trigger="unknown"):
+    """统一播放入口：带冷却 + 日志"""
+    now = time.time()
+    cd = SOUND_COOLDOWNS.get(category, 3.0)
+    if now - _last_sound_play.get(category, 0) < cd:
+        return False  # 冷却中，跳过
+    if not sound_enabled or not sounds.get(category):
+        return False
+    s = random.choice(sounds[category])
+    s.set_volume(volume)
+    s.play()
+    _last_sound_play[category] = now
+    ts = datetime.datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}] {trigger} → {category} (vol={volume:.1f})")
+    return True
 
 # 语音唤醒状态
 voice_wake_until = 0
@@ -346,16 +369,8 @@ def camera_detection_loop():
                             if is_fist and now > hiss_cooldown_until:
                                 # 握拳摇晃 → 惊吓/低吼
                                 print(f"[GESTURE] Fist shake! (dist={avg_tip_dist:.2f})")
-                                if sound_enabled and sounds.get("hiss"):
-                                    s = random.choice(sounds["hiss"])
-                                    s.set_volume(0.5)
-                                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🖐️手势-握拳 → hiss")
-                                    s.play()
-                                elif sound_enabled and sounds.get("growl"):
-                                    s = random.choice(sounds["growl"])
-                                    s.set_volume(0.5)
-                                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🖐️手势-握拳 → growl")
-                                    s.play()
+                                if not play_cat_sound("hiss", 0.5, "🖐️握拳"):
+                                    play_cat_sound("growl", 0.5, "🖐️握拳")
                                 hiss_cooldown_until = now + 2.0
                                 palm_history.clear()
                                 cv2.putText(debug, "HISS!", (120, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 100, 255), 2)
@@ -693,12 +708,8 @@ def main():
             eye_open += ((SNOOZE_EYE_H / EYE_H) - eye_open) * dt * 2
             # 睡觉时播放打哈欠音效
             if not hasattr(main, '_sleep_sound_played') or not main._sleep_sound_played:
-                if sound_enabled and sounds.get("purr"):
-                    s = random.choice(sounds["purr"])
-                    s.set_volume(0.3)
-                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 😴睡觉 → purr")
-                    s.play()
-                    main._sleep_sound_played = True
+                play_cat_sound("purr", 0.3, "😴睡觉")
+                main._sleep_sound_played = True
         else:
             eye_open += (1.0 - eye_open) * dt * 10
             if hasattr(main, '_sleep_sound_played'):
@@ -713,28 +724,17 @@ def main():
         mouth_open += (mouth_target - mouth_open) * min(1, dt * 12)
         
         # pet 时发声 + 冒爱心
-        if now < eye_pet_close_until and now > eye_pet_close_until - 1.4 and now > pet_sound_cooldown_until:
-            if sound_enabled and sounds.get("purr"):
-                s = random.choice(sounds["purr"])
-                s.set_volume(0.5)
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🖐️手势-张手 → purr")
-                s.play()
-                pet_sound_cooldown_until = now + 5.0
+        if now < eye_pet_close_until and now > eye_pet_close_until - 1.4:
+            play_cat_sound("purr", 0.5, "🖐️抚摸")
             spawn_hearts(6)
             eye_pet_close_until = now - 1
         
         # 语音唤醒发声
         if now < voice_wake_until and now > voice_wake_until - 1.9 and sound_enabled and now > voice_cooldown_until:
-            if voice_event_type == "hi" and sounds.get("meow"):
-                s = random.choice(sounds["meow"])
-                s.set_volume(0.6)
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎙️语音-hi → meow")
-                s.play()
-            elif sounds.get("meow"):
-                s = random.choice(sounds["meow"])
-                s.set_volume(0.5)
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎙️语音-唤醒 → meow")
-                s.play()
+            if voice_event_type == "hi":
+                play_cat_sound("meow", 0.6, "🎙️打招呼")
+            else:
+                play_cat_sound("meow", 0.5, "🎙️呼唤")
             voice_wake_until = now - 1
             voice_event_type = None
             voice_cooldown_until = now + 3.0
@@ -743,13 +743,8 @@ def main():
         next_random_sound -= dt
         if next_random_sound <= 0 and sound_enabled:
             pool = random.choice(["meow", "meow", "purr", "purr"])
-            if sounds.get(pool):
-                s = random.choice(sounds[pool])
-                s.set_volume(random.uniform(0.2, 0.4))
-                s.play()
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎲随机 → {pool}")
+            play_cat_sound(pool, random.uniform(0.2, 0.4), "🎲随机")
             next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
-            print(f"  → 下次随机声音: {next_random_sound:.0f}s后")
         
         # 绘制
         screen.fill(BG_COLOR)
