@@ -62,7 +62,7 @@ RANDOM_SOUND_INTERVAL = (40, 90)
 PALM_HISTORY_LEN = 15            # 记录最近 N 帧手掌位置
 SHAKE_THRESHOLD = 0.08           # 摇晃距离阈值（归一化坐标）
 SHAKE_MIN_COUNT = 3              # 最少方向变换次数才算摇晃
-GESTURE_COOLDOWN = 3.0           # pet 音效冷却
+GESTURE_COOLDOWN = 8.0           # pet 手势冷却
 FIST_THRESHOLD = 0.12              # 握拳判定阈值（指尖到掌心距离）
 
 # ── 全局状态 ────────────────────────────────────────────
@@ -88,6 +88,7 @@ palm_history = []                # 手掌位置历史 [(x,y,timestamp), ...]
 pet_cooldown_until = 0           # pet 冷却
 eye_pet_close_until = 0          # pet 时闭眼
 hiss_cooldown_until = 0           # 惊吓音效冷却
+pet_sound_cooldown_until = 0       # purr 音效冷却
 
 # 语音唤醒状态
 voice_wake_until = 0
@@ -712,12 +713,13 @@ def main():
         mouth_open += (mouth_target - mouth_open) * min(1, dt * 12)
         
         # pet 时发声 + 冒爱心
-        if now < eye_pet_close_until and now > eye_pet_close_until - 1.4:
+        if now < eye_pet_close_until and now > eye_pet_close_until - 1.4 and now > pet_sound_cooldown_until:
             if sound_enabled and sounds.get("purr"):
                 s = random.choice(sounds["purr"])
                 s.set_volume(0.5)
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🖐️手势-张手 → purr")
                 s.play()
+                pet_sound_cooldown_until = now + 5.0
             spawn_hearts(6)
             eye_pet_close_until = now - 1
         
@@ -744,9 +746,10 @@ def main():
             if sounds.get(pool):
                 s = random.choice(sounds[pool])
                 s.set_volume(random.uniform(0.2, 0.4))
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎲随机 → {pool} (下次{next_random_sound:.0f}s后)")
                 s.play()
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎲随机 → {pool}")
             next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
+            print(f"  → 下次随机声音: {next_random_sound:.0f}s后")
         
         # 绘制
         screen.fill(BG_COLOR)
