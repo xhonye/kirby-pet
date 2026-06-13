@@ -1,10 +1,12 @@
 """
-Kirby Desktop Pet — v3
-- 卡比风格大眼睛（椭圆+蓝色虹膜+瞳孔）
-- 倒三角嘴巴（张嘴时变大）
-- 手势识别：捏合→展开 = pet
-- 语音唤醒：喊"卡比"回应
-- 随机卡比声音
+Cat Desktop Pet — v4
+- 猫咪脸型（圆脸+三角耳+绿瞳竖瞳）
+- W 形猫嘴 + 张嘴椭圆
+- 胡须 + 腮红 + 鼻子
+- 猫爪（底部肉垫）
+- 手势识别：张手摇晃 = pet，握拳 = 惊吓
+- 语音唤醒：喊"猫咪"回应
+- 猫咪音效（purr/meow/hiss）
 """
 
 import pygame
@@ -23,28 +25,44 @@ WIDTH, HEIGHT = 500, 500
 BG_COLOR = (30, 30, 40)
 FPS = 60
 
-# 卡比眼睛参数（更像真卡比）
-EYE_COLOR = (255, 255, 255)      # 眼白
-IRIS_COLOR = (50, 100, 200)      # 蓝色虹膜（卡比经典色）
-PUPIL_COLOR = (20, 20, 60)       # 深色瞳孔
-HIGHLIGHT_COLOR = (255, 255, 255) # 高光
-BLUSH_COLOR = (255, 130, 150, 180) # 腮红
+# 猫咪参数
+FACE_COLOR = (255, 220, 180)     # 猫咪脸蛋颜色（暖米色）
+EAR_COLOR = (255, 200, 160)      # 耳朵外色
+EAR_INNER_COLOR = (255, 150, 160) # 耳朵内粉色
+NOSE_COLOR = (255, 140, 150)     # 鼻子粉色
+WHISKER_COLOR = (200, 200, 200)  # 胡须颜色
+PAW_COLOR = (255, 210, 170)      # 爪子颜色
 
-EYE_W = 80                       # 眼睛宽度
-EYE_H = 110                      # 眼睛高度
-EYE_SPACING = 70                 # 两眼间距
-EYE_Y = HEIGHT // 2 - 30         # 眼睛Y位置
+EYE_COLOR = (255, 255, 255)      # 眼白
+IRIS_COLOR = (80, 180, 80)       # 绿色虹膜（猫经典色）
+PUPIL_COLOR = (20, 20, 20)       # 黑色瞳孔（竖瞳）
+HIGHLIGHT_COLOR = (255, 255, 255) # 高光
+BLUSH_COLOR = (255, 150, 160, 120) # 腮红
+
+EYE_W = 55                       # 猫眼宽度（更扁）
+EYE_H = 65                       # 猫眼高度（更扁）
+EYE_SPACING = 80                 # 两眼间距
+EYE_Y = HEIGHT // 2 - 20         # 眼睛Y位置
 EYE_LEFT_X = WIDTH // 2 - EYE_SPACING
 EYE_RIGHT_X = WIDTH // 2 + EYE_SPACING
-PUPIL_TRACK_RANGE = 25           # 瞳孔跟踪范围
+PUPIL_TRACK_RANGE = 20           # 瞳孔跟踪范围
 
-# 倒三角嘴巴参数
-MOUTH_Y = EYE_Y + 85
-MOUTH_W = 30                     # 嘴巴半宽
-MOUTH_H_CLOSED = 8               # 闭嘴时高度
-MOUTH_H_OPEN = 40                # 张嘴时高度
-MOUTH_COLOR = (180, 60, 80)      # 嘴巴颜色（深红）
-TONGUE_COLOR = (220, 100, 100)   # 舌头颜色
+# 鼻子
+NOSE_Y = EYE_Y + 55
+NOSE_SIZE = 12
+
+# 嘴巴参数
+MOUTH_Y = NOSE_Y + 15
+MOUTH_W = 25                     # 嘴巴半宽
+MOUTH_H_CLOSED = 5               # 闭嘴时高度
+MOUTH_H_OPEN = 30                # 张嘴时高度
+MOUTH_COLOR = (180, 80, 90)      # 嘴巴颜色
+TONGUE_COLOR = (255, 130, 130)   # 舌头颜色
+
+# 耳朵
+EAR_Y = EYE_Y - 70
+EAR_W = 40
+EAR_H = 55
 
 # 眨眼
 BLINK_INTERVAL = (2, 6)
@@ -636,7 +654,7 @@ def main():
         print(f"[WARN] 音频失败: {e}")
     
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Cat Pet")
+    pygame.display.set_caption("🐱 Cat Pet")
     try:
         import ctypes
         hwnd = pygame.display.get_wm_info()["window"]
@@ -753,7 +771,7 @@ def main():
         # 绘制
         screen.fill(BG_COLOR)
         draw_feet(screen)
-        draw_eyes(screen, eye_open)
+        draw_cat_face(screen, eye_open)
         draw_mouth(screen, mouth_open)
         draw_hearts(screen, dt)
         draw_state(screen, font, state, clock.get_fps())
