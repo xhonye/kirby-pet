@@ -13,6 +13,7 @@ import numpy as np
 import threading
 import time
 import random
+import datetime
 import math
 import sys
 import os
@@ -347,10 +348,12 @@ def camera_detection_loop():
                                 if sound_enabled and sounds.get("hiss"):
                                     s = random.choice(sounds["hiss"])
                                     s.set_volume(0.5)
+                                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🖐️手势-握拳 → hiss")
                                     s.play()
                                 elif sound_enabled and sounds.get("growl"):
                                     s = random.choice(sounds["growl"])
                                     s.set_volume(0.5)
+                                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🖐️手势-握拳 → growl")
                                     s.play()
                                 hiss_cooldown_until = now + 2.0
                                 palm_history.clear()
@@ -497,7 +500,8 @@ _hearts = []  # [(x, y, vx, vy, life, max_life), ...]
 
 def spawn_hearts(count=5):
     """在卡比头顶生成爱心粒子"""
-    import random as _r
+    import random
+import datetime as _r
     for _ in range(count):
         x = WIDTH // 2 + _r.randint(-60, 60)
         y = EYE_Y - 80 + _r.randint(-20, 10)
@@ -692,6 +696,7 @@ def main():
                 if sound_enabled and sounds.get("purr"):
                     s = random.choice(sounds["purr"])
                     s.set_volume(0.3)
+                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 😴睡觉 → purr")
                     s.play()
                     main._sleep_sound_played = True
         else:
@@ -712,6 +717,7 @@ def main():
             if sound_enabled and sounds.get("purr"):
                 s = random.choice(sounds["purr"])
                 s.set_volume(0.5)
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🖐️手势-张手 → purr")
                 s.play()
             spawn_hearts(6)
             eye_pet_close_until = now - 1
@@ -721,10 +727,12 @@ def main():
             if voice_event_type == "hi" and sounds.get("meow"):
                 s = random.choice(sounds["meow"])
                 s.set_volume(0.6)
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎙️语音-hi → meow")
                 s.play()
             elif sounds.get("meow"):
                 s = random.choice(sounds["meow"])
                 s.set_volume(0.5)
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎙️语音-唤醒 → meow")
                 s.play()
             voice_wake_until = now - 1
             voice_event_type = None
@@ -737,6 +745,7 @@ def main():
             if sounds.get(pool):
                 s = random.choice(sounds[pool])
                 s.set_volume(random.uniform(0.2, 0.4))
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎲随机 → {pool} (下次{next_random_sound:.0f}s后)")
                 s.play()
             next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
         
