@@ -55,7 +55,7 @@ SNOOZE_EYE_H = 20
 
 # 声音
 SAMPLE_RATE = 22050
-RANDOM_SOUND_INTERVAL = (6, 18)
+RANDOM_SOUND_INTERVAL = (40, 90)
 
 # 手势检测（手掌摇晃 = pet）
 PALM_HISTORY_LEN = 15            # 记录最近 N 帧手掌位置
