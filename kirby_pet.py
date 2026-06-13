@@ -110,7 +110,7 @@ def play_cat_sound(category, volume=0.5, trigger="unknown"):
     s.play()
     _last_sound_play[category] = now
     ts = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"[{ts}] {trigger} → {category} (vol={volume:.1f})")
+    print(f"[{ts}] {trigger} → {category} (vol={volume:.1f})", flush=True)
     return True
 
 # 语音唤醒状态
@@ -268,8 +268,8 @@ def camera_detection_loop():
         hand_opts = vision.HandLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=hand_model),
             num_hands=1,
-            min_hand_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
+            min_hand_detection_confidence=0.7,  # 提高阈值减少误检
+            min_tracking_confidence=0.7,  # 提高跟踪置信度
             running_mode=vision.RunningMode.VIDEO,
         )
         hand_detector = vision.HandLandmarker.create_from_options(hand_opts)
@@ -337,8 +337,11 @@ def camera_detection_loop():
                     cv2.circle(debug, (px, py), 6, (0, 255, 255), -1)
                     cv2.putText(debug, "PALM", (px + 10, py), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
                     
-                    # 记录手掌位置
-                    palm_history.append((palm_cx, palm_cy, now))
+                    # 只在手掌位于画面下半部分时才记录（排除靠近脸部的误检）
+                    if palm_cy > 0.35:
+                        palm_history.append((palm_cx, palm_cy, now))
+                    else:
+                        palm_history.clear()  # 手在画面上部，可能是误检
                     if len(palm_history) > PALM_HISTORY_LEN:
                         palm_history.pop(0)
                     
@@ -368,7 +371,7 @@ def camera_detection_loop():
                             
                             if is_fist and now > hiss_cooldown_until:
                                 # 握拳摇晃 → 惊吓/低吼
-                                print(f"[GESTURE] Fist shake! (dist={avg_tip_dist:.2f})")
+                                print(f"[GESTURE] Fist shake! (dist={avg_tip_dist:.2f})", flush=True)
                                 if not play_cat_sound("hiss", 0.5, "🖐️握拳"):
                                     play_cat_sound("growl", 0.5, "🖐️握拳")
                                 hiss_cooldown_until = now + 2.0
@@ -376,7 +379,7 @@ def camera_detection_loop():
                                 cv2.putText(debug, "HISS!", (120, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 100, 255), 2)
                             elif not is_fist and now > pet_cooldown_until:
                                 # 张手摇晃 → pet 抚摸
-                                print(f"[GESTURE] Pet! (open hand)")
+                                print(f"[GESTURE] Pet! (open hand)", flush=True)
                                 eye_pet_close_until = now + 1.5
                                 pet_cooldown_until = now + GESTURE_COOLDOWN
                                 palm_history.clear()
@@ -743,6 +746,7 @@ def main():
         next_random_sound -= dt
         if next_random_sound <= 0 and sound_enabled:
             pool = random.choice(["meow", "meow", "purr", "purr"])
+            print(f"[DEBUG] random timer fired, trying {pool}", flush=True)
             play_cat_sound(pool, random.uniform(0.2, 0.4), "🎲随机")
             next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
         
