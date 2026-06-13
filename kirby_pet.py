@@ -88,6 +88,7 @@ eye_pet_close_until = 0          # pet 时闭眼
 
 # 语音唤醒状态
 voice_wake_until = 0
+voice_event_type = None           # "hi" or None
 
 # 下一次随机声音
 next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
@@ -99,26 +100,58 @@ detection_count = 0
 
 # ── 音效加载 ────────────────────────────────────────────
 def load_sounds():
+    """加载音效：优先使用 Kirby 游戏原声，回退到合成音"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     sounds_dir = os.path.join(script_dir, "sounds")
+    kirby_dir = os.path.join(sounds_dir, "Kirby")
     loaded = {}
-    sound_map = {
+    
+    def load_one(path):
+        try:
+            return pygame.mixer.Sound(path)
+        except Exception:
+            return None
+    
+    # 游戏原声映射
+    # 08-09: pet/被摸
+    # 19-21: 睡觉/打哈欠
+    # 22-28: hi/打招呼
+    game_sounds = {
+        "pet": [os.path.join(kirby_dir, f"{n}_0x*.wav") for n in range(8, 10)],
+        "sleep": [os.path.join(kirby_dir, f"{n}_0x*.wav") for n in range(19, 22)],
+        "hi": [os.path.join(kirby_dir, f"{n}_0x*.wav") for n in range(22, 29)],
+    }
+    
+    import glob
+    for name, patterns in game_sounds.items():
+        sounds = []
+        for pat in patterns:
+            for f in sorted(glob.glob(pat)):
+                s = load_one(f)
+                if s:
+                    sounds.append(s)
+        if sounds:
+            loaded[name] = sounds
+            print(f"  ✅ {name}: {len(sounds)} game sounds")
+    
+    # 回退合成音
+    fallback_map = {
         "poyo": ["poyo.wav", "poyo.mp3"],
         "happy": ["happy.wav", "happy.mp3"],
         "inhale": ["inhale.wav", "inhale.mp3"],
         "hurt": ["hurt.wav", "hurt.mp3"],
-        "pet": ["pet.wav", "pet.mp3"],
     }
-    for name, files in sound_map.items():
-        for fname in files:
-            path = os.path.join(sounds_dir, fname)
-            if os.path.exists(path):
-                try:
-                    loaded[name] = [pygame.mixer.Sound(path)]
-                    print(f"  ✅ {name}: {fname}")
-                    break
-                except Exception as e:
-                    print(f"  ❌ {name}: {e}")
+    for name, files in fallback_map.items():
+        if name not in loaded:
+            for fname in files:
+                path = os.path.join(sounds_dir, fname)
+                if os.path.exists(path):
+                    s = load_one(path)
+                    if s:
+                        loaded[name] = [s]
+                        print(f"  ⚡ {name}: {fname} (fallback)")
+                        break
+    
     return loaded
 
 # ── 语音识别线程 ────────────────────────────────────────
@@ -159,12 +192,22 @@ def voice_recognition_loop():
             text = recognizer.recognize_google(audio, language="zh-CN")
             print(f"[VOICE] {text}")
             
-            # 模糊匹配各种发音
-            keywords = ["卡比", "卡逼", "科比", "卡币", "咖比", "kabi", "kirby"]
-            if any(kw in text.lower() for kw in keywords):
+            # 模糊匹配打招呼
+            hi_keywords = ["hi", "嗨", "嘿", "hello", "你好", "哈喽", "hey"]
+            if any(kw in text.lower() for kw in hi_keywords):
+                print("[VOICE] ★ 打招呼！")
+                voice_wake_until = time.time() + 2.0
+                mouth_event_until = time.time() + 1.5
+                # 标记为 hi 事件，播放 hi 音效
+                voice_event_type = "hi"
+            
+            # 模糊匹配呼唤卡比
+            kirby_keywords = ["卡比", "卡逼", "科比", "卡币", "咖比", "kabi", "kirby"]
+            if any(kw in text.lower() for kw in kirby_keywords):
                 print("[VOICE] ★ 呼唤卡比！")
                 voice_wake_until = time.time() + 2.0
                 mouth_event_until = time.time() + 1.5
+                voice_event_type = "hi"  # 卡比也用 hi 音效回应
                 
         except sr.WaitTimeoutError:
             pass
@@ -382,7 +425,7 @@ def main():
     global blink_timer, is_blinking, blink_end, next_blink
     global wander_timer, mouth_open, mouth_target
     global mouth_event_until, eye_pet_close_until
-    global voice_wake_until, next_random_sound
+    global voice_wake_until, voice_event_type, next_random_sound
     
     pygame.init()
     sound_enabled = False
@@ -467,8 +510,17 @@ def main():
             eye_open = max(0.05, eye_open - dt * 15)
         elif state == "sleeping":
             eye_open += ((SNOOZE_EYE_H / EYE_H) - eye_open) * dt * 2
+            # 睡觉时播放打哈欠音效
+            if not hasattr(main, '_sleep_sound_played') or not main._sleep_sound_played:
+                if sound_enabled and sounds.get("sleep"):
+                    s = random.choice(sounds["sleep"])
+                    s.set_volume(0.3)
+                    s.play()
+                    main._sleep_sound_played = True
         else:
             eye_open += (1.0 - eye_open) * dt * 10
+            if hasattr(main, '_sleep_sound_played'):
+                main._sleep_sound_played = False
         
         # 嘴巴
         mouth_target = 0.0
@@ -482,25 +534,30 @@ def main():
         if now < eye_pet_close_until and now > eye_pet_close_until - 1.4 and sound_enabled:
             if sounds.get("pet"):
                 s = random.choice(sounds["pet"])
-                s.set_volume(0.35)
+                s.set_volume(0.5)
                 s.play()
-                eye_pet_close_until = now - 1  # 只播一次
+                eye_pet_close_until = now - 1
         
         # 语音唤醒发声
         if now < voice_wake_until and now > voice_wake_until - 1.9 and sound_enabled:
-            if sounds.get("poyo"):
+            if voice_event_type == "hi" and sounds.get("hi"):
+                s = random.choice(sounds["hi"])
+                s.set_volume(0.6)
+                s.play()
+            elif sounds.get("poyo"):
                 s = random.choice(sounds["poyo"])
                 s.set_volume(0.5)
                 s.play()
-                voice_wake_until = now - 1
+            voice_wake_until = now - 1
+            voice_event_type = None
         
         # 随机声音
         next_random_sound -= dt
         if next_random_sound <= 0 and sound_enabled:
-            pool = random.choice(["poyo", "happy", "inhale"])
+            pool = random.choice(["hi", "poyo", "happy", "inhale"])
             if sounds.get(pool):
                 s = random.choice(sounds[pool])
-                s.set_volume(random.uniform(0.15, 0.35))
+                s.set_volume(random.uniform(0.2, 0.4))
                 s.play()
             next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
         
