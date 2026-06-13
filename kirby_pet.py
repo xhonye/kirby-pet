@@ -91,6 +91,7 @@ hiss_cooldown_until = 0           # 惊吓音效冷却
 # 语音唤醒状态
 voice_wake_until = 0
 voice_event_type = None           # "hi" or None
+voice_cooldown_until = 0          # 语音音效冷却
 
 # 下一次随机声音
 next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
@@ -600,7 +601,7 @@ def main():
     global blink_timer, is_blinking, blink_end, next_blink
     global wander_timer, mouth_open, mouth_target
     global mouth_event_until, eye_pet_close_until
-    global voice_wake_until, voice_event_type, next_random_sound
+    global voice_wake_until, voice_event_type, voice_cooldown_until, next_random_sound
     
     global sound_enabled, sounds
     pygame.init()
@@ -716,7 +717,7 @@ def main():
             eye_pet_close_until = now - 1
         
         # 语音唤醒发声
-        if now < voice_wake_until and now > voice_wake_until - 1.9 and sound_enabled:
+        if now < voice_wake_until and now > voice_wake_until - 1.9 and sound_enabled and now > voice_cooldown_until:
             if voice_event_type == "hi" and sounds.get("meow"):
                 s = random.choice(sounds["meow"])
                 s.set_volume(0.6)
@@ -727,6 +728,7 @@ def main():
                 s.play()
             voice_wake_until = now - 1
             voice_event_type = None
+            voice_cooldown_until = now + 3.0
         
         # 随机声音
         next_random_sound -= dt
