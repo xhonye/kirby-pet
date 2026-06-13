@@ -131,6 +131,9 @@ def play_cat_sound(category, volume=0.5, trigger="unknown"):
     s.set_volume(volume)
     s.play()
     _last_sound_play[category] = now
+    # 耳朵竖起反应
+    global _ear_perk
+    _ear_perk = [1.0, 1.0]
     ts = datetime.datetime.now().strftime("%H:%M:%S")
     print(f"[{ts}] {trigger} → {category}/{fname} (vol={volume:.1f})", flush=True)
     return True
@@ -142,6 +145,11 @@ voice_cooldown_until = 0          # 语音音效冷却
 
 # 下一次随机声音
 next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
+
+# 初始化背景星星
+for _ in range(30):
+    _stars.append([random.randint(0, 500), random.randint(0, 500),
+                   random.uniform(0.2, 0.8), random.uniform(0.5, 2.0)])
 
 # 摄像头
 camera_status = "init"
@@ -434,18 +442,20 @@ def draw_cat_face(screen, eye_open_ratio=1.0):
     cx = WIDTH // 2
     face_y = EYE_Y + 25
 
-    # ── 耳朵倾斜动画（偶尔动一下）──
+    # ── 耳朵动画（倾斜 + 竖起反应）──
     for i in range(2):
         if random.random() < 0.005:
             _ear_target[i] = random.uniform(-8, 8)
         _ear_tilt[i] += (_ear_target[i] - _ear_tilt[i]) * 0.05
+        _ear_perk[i] *= 0.97  # 竖起衰减
 
     # ── 耳朵（大三角，带绒毛）──
     for idx, side in enumerate([-1, 1]):
         ear_cx = cx + side * 100
         tilt = _ear_tilt[idx]
+        perk_offset = int(_ear_perk[idx] * -8)  # 竖起时耳朵往上
         pts_outer = [
-            (ear_cx + side * 5 + tilt, EAR_Y),
+            (ear_cx + side * 5 + tilt, EAR_Y + perk_offset),
             (ear_cx - EAR_W - 3, EAR_Y + EAR_H + 8),
             (ear_cx + EAR_W + 3, EAR_Y + EAR_H + 8),
         ]
@@ -650,6 +660,15 @@ _ear_tilt = [0, 0] # 耳朵倾斜角度 [左, 右]
 _ear_target = [0, 0]
 _sleep_zzz = []    # [(x, y, life, max_life), ...]
 _pupil_dilation = 1.0  # 瞳孔缩放
+_blink_count = 0         # 连续眨眼计数
+_next_double_blink = random.uniform(8, 20)  # 下次双眨眼时间
+_head_tilt = 0.0         # 头部倾斜角度
+_head_tilt_target = 0.0
+_sleep_nod = 0.0         # 睡觉点头动画
+_ear_perk = [0, 0]       # 耳朵竖起程度 [左, 右]
+_state_glow = 0.0        # 状态切换光晕
+_prev_state = "idle"     # 上一状态
+_stars = []              # 背景星星 [(x, y, brightness, twinkle_speed)]
 
 def spawn_hearts(count=5):
     """在卡比头顶生成爱心粒子"""
@@ -728,27 +747,33 @@ def draw_hearts(screen, dt):
 
 # ── 头顶小脚丫 ─────────────────────────────────────────
 # ── 猫爪（带肉垫细节）────────────────────────────────────────
+# ── 猫爪（带肉垫 + 被摸时踩奶动画）────────────────────────
 def draw_feet(screen):
-    """底部猫爪 + 肉垫"""
+    """底部猫爪 + 肉垫 + 踩奶"""
     paw_y = HEIGHT - 50
-    for px in [WIDTH // 2 - 55, WIDTH // 2 + 55]:
-        # 掌心（椭圆）
+    is_petted = time.time() < _blush_until
+    for idx, px in enumerate([WIDTH // 2 - 55, WIDTH // 2 + 55]):
+        # 踩奶动画（被摸时上下微动）
+        knead_offset = 0
+        if is_petted:
+            knead_offset = math.sin(time.time() * 4 + idx * math.pi) * 4
+        py = paw_y + knead_offset
+        # 掌心
         paw_rect = pygame.Rect(0, 0, 34, 24)
-        paw_rect.center = (px, paw_y)
+        paw_rect.center = (px, py)
         pygame.draw.ellipse(screen, PAW_COLOR, paw_rect)
-        # 肉垫（大椭圆）
+        # 肉垫
         pad_rect = pygame.Rect(0, 0, 14, 11)
-        pad_rect.center = (px, paw_y + 3)
+        pad_rect.center = (px, py + 3)
         pygame.draw.ellipse(screen, PAW_PAD_COLOR, pad_rect)
-        # 小爪尖（3 个圆）
+        # 小爪尖
         for dx in [-11, 0, 11]:
             tip_rect = pygame.Rect(0, 0, 9, 9)
-            tip_rect.center = (px + dx, paw_y - 11)
+            tip_rect.center = (px + dx, py - 11)
             pygame.draw.ellipse(screen, PAW_COLOR, tip_rect)
-        # 爪尖肉垫
         for dx in [-11, 0, 11]:
             tip_pad = pygame.Rect(0, 0, 4, 4)
-            tip_pad.center = (px + dx, paw_y - 10)
+            tip_pad.center = (px + dx, py - 10)
             pygame.draw.ellipse(screen, PAW_PAD_COLOR, tip_pad)
 
 def draw_state(screen, font, state_text, fps_val):
@@ -815,6 +840,16 @@ def main():
                 if event.key == pygame.K_ESCAPE:
                     running = False
         
+        # 状态切换光晕
+        if state != _prev_state:
+            _state_glow = 1.0
+            _prev_state = state
+        _state_glow *= 0.95  # 快速衰减
+
+        # 头部倾斜动画
+        _head_tilt += (_head_tilt_target - _head_tilt) * 0.05
+        _head_tilt_target *= 0.98  # 自然回正
+
         # 状态机
         if face_x is not None:
             state = "tracking"
@@ -823,6 +858,8 @@ def main():
             if face_y is not None:
                 target_pupil[1] = (face_y - 0.5) * 1.5
             wander_timer = now
+            # 头部微微倾斜（好奇感）
+            _head_tilt_target = (face_x - 0.5) * 8
         else:
             if now - wander_timer > SLEEP_TIMEOUT:
                 state = "sleeping"
@@ -836,13 +873,21 @@ def main():
         for i in range(2):
             pupil_offset[i] += (target_pupil[i] - pupil_offset[i]) * min(1, dt * 8)
         
-        # 眨眼
+        # 眨眼（偶尔双眨眼更自然）
         blink_timer += dt
         if is_blinking:
             if now > blink_end:
                 is_blinking = False
-                next_blink = random.uniform(*BLINK_INTERVAL)
-                blink_timer = 0
+                _blink_count += 1
+                # 偶尔双眨眼
+                if _blink_count >= _next_double_blink:
+                    is_blinking = True
+                    blink_end = now + BLINK_DURATION
+                    _blink_count = 0
+                    _next_double_blink = random.uniform(8, 20)
+                else:
+                    next_blink = random.uniform(*BLINK_INTERVAL)
+                    blink_timer = 0
         else:
             if blink_timer > next_blink:
                 is_blinking = True
@@ -855,6 +900,8 @@ def main():
             eye_open = max(0.05, eye_open - dt * 15)
         elif state == "sleeping":
             eye_open += ((SNOOZE_EYE_H / EYE_H) - eye_open) * min(1, dt * 1.5)
+            # 睡觉点头
+            _sleep_nod = math.sin(now * 0.8) * 3
             # 睡觉时播放打哈欠音效 + ZZZ
             if not hasattr(main, '_sleep_sound_played') or not main._sleep_sound_played:
                 play_cat_sound("purr", 0.3, "😴睡觉")
@@ -864,6 +911,7 @@ def main():
                 spawn_zzz()
         else:
             eye_open += (1.0 - eye_open) * min(1, dt * 3)
+            _sleep_nod = 0
             if hasattr(main, '_sleep_sound_played'):
                 main._sleep_sound_played = False
         
@@ -900,16 +948,32 @@ def main():
             play_cat_sound(pool, random.uniform(0.2, 0.4), "🎲随机")
             next_random_sound = random.uniform(*RANDOM_SOUND_INTERVAL)
         
-        # 绘制（渐变背景）
+        # 绘制（渐变背景 + 星星）
         for row in range(HEIGHT):
             t = row / HEIGHT
-            r = int(30 + 15 * t)
-            g = int(30 + 10 * t)
-            b = int(40 + 20 * t)
+            r = int(25 + 15 * t)
+            g = int(25 + 10 * t)
+            b = int(38 + 22 * t)
             pygame.draw.line(screen, (r, g, b), (0, row), (WIDTH, row))
+        # 星星闪烁
+        for star in _stars:
+            star[1] += 0.05  # 极慢下移
+            if star[1] > HEIGHT:
+                star[1] = 0
+                star[0] = random.randint(0, WIDTH)
+            brightness = star[2] + 0.3 * math.sin(now * star[3])
+            alpha = max(0, min(255, int(180 * brightness)))
+            pygame.draw.circle(screen, (200, 200, 220, alpha), (int(star[0]), int(star[1])), 1)
         draw_feet(screen)
         draw_cat_face(screen, eye_open)
         draw_mouth(screen, mouth_open)
+        # 状态切换光晕
+        if _state_glow > 0.05:
+            glow_alpha = int(60 * _state_glow)
+            glow_surf = pygame.Surface((300, 300), pygame.SRCALPHA)
+            glow_color = (100, 200, 255, glow_alpha) if state == "tracking" else (200, 200, 255, glow_alpha)
+            pygame.draw.circle(glow_surf, glow_color, (150, 150), 150)
+            screen.blit(glow_surf, (WIDTH // 2 - 150, EYE_Y - 50))
         draw_hearts(screen, dt)
         if state == "sleeping":
             draw_zzz(screen, dt)
