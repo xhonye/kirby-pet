@@ -105,12 +105,12 @@ def play_cat_sound(category, volume=0.5, trigger="unknown"):
         return False  # 冷却中，跳过
     if not sound_enabled or not sounds.get(category):
         return False
-    s = random.choice(sounds[category])
+    s, fname = random.choice(sounds[category])
     s.set_volume(volume)
     s.play()
     _last_sound_play[category] = now
     ts = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"[{ts}] {trigger} → {category} (vol={volume:.1f})", flush=True)
+    print(f"[{ts}] {trigger} → {category}/{fname} (vol={volume:.1f})", flush=True)
     return True
 
 # 语音唤醒状态
@@ -150,16 +150,16 @@ def load_sounds():
     }
     
     for name, files in sound_map.items():
-        sounds = []
+        items = []
         for fname in files:
             path = os.path.join(cat_dir, fname)
             if os.path.exists(path):
                 s = load_one(path)
                 if s:
-                    sounds.append(s)
-        if sounds:
-            loaded[name] = sounds
-            print(f"  ✅ {name}: {len(sounds)} sounds")
+                    items.append((s, fname))
+        if items:
+            loaded[name] = items
+            print(f"  ✅ {name}: {len(items)} sounds")
         else:
             print(f"  ⚠️ {name}: no sounds found")
     
