@@ -61,7 +61,7 @@ RANDOM_SOUND_INTERVAL = (40, 90)
 PALM_HISTORY_LEN = 15            # 记录最近 N 帧手掌位置
 SHAKE_THRESHOLD = 0.08           # 摇晃距离阈值（归一化坐标）
 SHAKE_MIN_COUNT = 3              # 最少方向变换次数才算摇晃
-GESTURE_COOLDOWN = 2.0           # pet 音效冷却
+GESTURE_COOLDOWN = 3.0           # pet 音效冷却
 FIST_THRESHOLD = 0.12              # 握拳判定阈值（指尖到掌心距离）
 
 # ── 全局状态 ────────────────────────────────────────────
@@ -329,7 +329,7 @@ def camera_detection_loop():
                         color = (0, 255, 255) if "PET" in shake_label else (200, 200, 200)
                         cv2.putText(debug, shake_label, (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
                         
-                        if total_changes >= SHAKE_MIN_COUNT and total_dist > SHAKE_THRESHOLD:
+                        if total_changes >= SHAKE_MIN_COUNT and total_dist > SHAKE_THRESHOLD and len(palm_history) >= 8:
                             # 检测是否握拳（指尖靠近掌心）
                             palm_center = hand[0]  # 手腕
                             finger_tips = [hand[4], hand[8], hand[12], hand[16], hand[20]]
@@ -602,8 +602,10 @@ def main():
     global mouth_event_until, eye_pet_close_until
     global voice_wake_until, voice_event_type, next_random_sound
     
+    global sound_enabled, sounds
     pygame.init()
     sound_enabled = False
+    sounds = {}
     try:
         pygame.mixer.init(frequency=SAMPLE_RATE, size=-16, channels=2)
         sound_enabled = True
@@ -622,7 +624,6 @@ def main():
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 14)
     
-    sounds = {}
     if sound_enabled:
         print("[INFO] 加载音效...")
         sounds = load_sounds()
