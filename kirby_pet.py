@@ -306,24 +306,68 @@ def camera_detection_loop():
             cv2.rectangle(debug, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.putText(debug, "FACE", (x1, y1 - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
             
-            # 手势检测：捏合→展开 = pet
+            # 手势检测：手掌摇晃 = pet
             if hand_detector is not None:
                 hand_result = hand_detector.detect_for_video(mp_image, ts)
                 if hand_result.hand_landmarks:
                     hand = hand_result.hand_landmarks[0]
-                    # 拇指尖(4) 和 食指尖(8)
-                    thumb_tip = hand[4]
-                    index_tip = hand[8]
-                    dist = math.sqrt((thumb_tip.x - index_tip.x)**2 + (thumb_tip.y - index_tip.y)**2)
                     
-                    # 画指尖连线
-                    tx, ty = int(thumb_tip.x * 320), int(thumb_tip.y * 240)
-                    ix, iy = int(index_tip.x * 320), int(index_tip.y * 240)
-                    cv2.circle(debug, (tx, ty), 4, (255, 200, 0), -1)
-                    cv2.circle(debug, (ix, iy), 4, (255, 200, 0), -1)
-                    cv2.line(debug, (tx, ty), (ix, iy), (255, 200, 0), 1)
+                    # 画全手骨骼（21个关键点 + 连线）
+                    connections = [
+                        (0,1),(1,2),(2,3),(3,4),       # 拇指
+                        (0,5),(5,6),(6,7),(7,8),       # 食指
+                        (0,9),(9,10),(10,11),(11,12),   # 中指
+                        (0,13),(13,14),(14,15),(15,16), # 无名指
+                        (0,17),(17,18),(18,19),(19,20), # 小指
+                        (5,9),(9,13),(13,17),           # 掌心
+                    ]
+                    for c in connections:
+                        x1 = int(hand[c[0]].x * 320)
+                        y1 = int(hand[c[0]].y * 240)
+                        x2 = int(hand[c[1]].x * 320)
+                        y2 = int(hand[c[1]].y * 240)
+                        cv2.line(debug, (x1, y1), (x2, y2), (200, 180, 100), 1)
+                    for lm in hand:
+                        px, py = int(lm.x * 320), int(lm.y * 240)
+                        cv2.circle(debug, (px, py), 3, (255, 200, 0), -1)
                     
-                    # 捏合状态机
+                    # 手掌中心（手腕+中指根部中点）
+                    wrist = hand[0]
+                    mid_base = hand[9]
+                    palm_cx = (wrist.x + mid_base.x) / 2
+                    palm_cy = (wrist.y + mid_base.y) / 2
+                    px, py = int(palm_cx * 320), int(palm_cy * 240)
+                    cv2.circle(debug, (px, py), 6, (0, 255, 255), -1)
+                    cv2.putText(debug, "PALM", (px + 10, py), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
+                    
+                    # 记录手掌位置
+                    palm_history.append((palm_cx, palm_cy, now))
+                    if len(palm_history) > PALM_HISTORY_LEN:
+                        palm_history.pop(0)
+                    
+                    # 检测摇晃
+                    if len(palm_history) >= 5:
+                        dx_list = [palm_history[j][0] - palm_history[j-1][0] for j in range(1, len(palm_history))]
+                        dy_list = [palm_history[j][1] - palm_history[j-1][1] for j in range(1, len(palm_history))]
+                        x_changes = sum(1 for k in range(1, len(dx_list)) if dx_list[k] * dx_list[k-1] < 0)
+                        y_changes = sum(1 for k in range(1, len(dy_list)) if dy_list[k] * dy_list[k-1] < 0)
+                        total_changes = x_changes + y_changes
+                        total_dist = sum(math.sqrt(dx**2 + dy**2) for dx, dy in zip(dx_list, dy_list))
+                        
+                        shake_label = "PET!" if total_changes >= SHAKE_MIN_COUNT and total_dist > SHAKE_THRESHOLD else f"shake:{total_changes} d:{total_dist:.2f}"
+                        color = (0, 255, 255) if "PET" in shake_label else (200, 200, 200)
+                        cv2.putText(debug, shake_label, (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+                        
+                        if total_changes >= SHAKE_MIN_COUNT and total_dist > SHAKE_THRESHOLD:
+                            if now > pet_cooldown_until:
+                                print(f"[GESTURE] Pet! (shake {total_changes}x)")
+                                eye_pet_close_until = now + 1.5
+                                pet_cooldown_until = now + GESTURE_COOLDOWN
+                                palm_history.clear()
+                                cv2.putText(debug, "PET!", (120, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+                else:
+                    palm_history.clear()
+        else:
             face_x, face_y = None, None
             camera_status = "no_face"
             cv2.putText(debug, "NO FACE", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
