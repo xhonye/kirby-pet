@@ -143,10 +143,10 @@ def load_sounds():
     
     # 猫咪音效映射
     sound_map = {
-        "purr": ["purr_01.mp3", "purr_02.mp3", "purr_03.mp3"],      # 呼噜（被摸/满足）
-        "meow": ["meow_01.mp3", "meow_02.mp3", "meow_03.mp3", "meow_04.mp3"],  # 喵叫（打招呼/回应）
-        "hiss": ["hiss_01.mp3", "hiss_02.mp3"],      # 嘶嘶（惊吓/不爽）
-        "growl": ["growl_01.mp3"],                    # 低吼（生气/警告）
+        "purr": ["purr_01.mp3"],                      # 呼噜（抚摸/满足）
+        "meow": ["meow_01.mp3", "meow_03.mp3", "meow_04.mp3"],  # 喵叫（打招呼/随机叫）
+        "hiss": ["hiss_01.mp3", "hiss_02.mp3", "meow_02.mp3"],  # 惊吓/嘶嘶
+        "growl": [],                                  # 低吼（暂空，hiss 兜底）
     }
     
     for name, files in sound_map.items():
