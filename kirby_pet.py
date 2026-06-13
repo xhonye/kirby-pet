@@ -294,21 +294,7 @@ def camera_detection_loop():
                 if hand_result.hand_landmarks:
                     hand = hand_result.hand_landmarks[0]
                     
-                    # 画全手骨骼（21个关键点 + 连线）
-                    connections = [
-                        (0,1),(1,2),(2,3),(3,4),       # 拇指
-                        (0,5),(5,6),(6,7),(7,8),       # 食指
-                        (0,9),(9,10),(10,11),(11,12),   # 中指
-                        (0,13),(13,14),(14,15),(15,16), # 无名指
-                        (0,17),(17,18),(18,19),(19,20), # 小指
-                        (5,9),(9,13),(13,17),           # 掌心
-                    ]
-                    for c in connections:
-                        x1 = int(hand[c[0]].x * 320)
-                        y1 = int(hand[c[0]].y * 240)
-                        x2 = int(hand[c[1]].x * 320)
-                        y2 = int(hand[c[1]].y * 240)
-                        cv2.line(debug, (x1, y1), (x2, y2), (200, 180, 100), 1)
+                    # 只画关键点（21个点，无线条）
                     for lm in hand:
                         px, py = int(lm.x * 320), int(lm.y * 240)
                         cv2.circle(debug, (px, py), 3, (255, 200, 0), -1)
