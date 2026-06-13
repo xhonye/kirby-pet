@@ -204,7 +204,7 @@ def voice_recognition_loop():
             print(f"[VOICE] {text}")
             
             # 模糊匹配打招呼
-            hi_keywords = ["hi", "嗨", "嘿", "hello", "你好", "哈喽", "hey", "猫咪", "猫猫", "喵"]
+            hi_keywords = ["hi", "嗨", "嘿", "hello", "你好", "哈喽", "哈啰", "hey", "猫咪", "猫猫", "喵"]
             if any(kw in text.lower() for kw in hi_keywords):
                 print("[VOICE] ★ 打招呼！")
                 voice_wake_until = time.time() + 2.0
