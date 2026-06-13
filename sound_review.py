@@ -310,12 +310,26 @@ document.addEventListener('keydown', (e) => {
 </html>"""
 
 
+def load_reviewed():
+    """Load already-reviewed filenames from CSV"""
+    csv_path = Path(__file__).parent / "sounds" / "sound_review.csv"
+    reviewed = set()
+    if csv_path.exists():
+        with open(csv_path, "r", encoding="utf-8") as f:
+            next(f)  # skip header
+            for line in f:
+                parts = line.strip().split(",")
+                if len(parts) >= 2:
+                    reviewed.add(parts[0])
+    return reviewed
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/" or self.path == "/index.html":
+            reviewed = load_reviewed()
             sounds = sorted([
                 f for f in os.listdir(SOUNDS_DIR)
-                if f.endswith(".mp3") and os.path.isfile(SOUNDS_DIR / f)
+                if f.endswith(".mp3") and os.path.isfile(SOUNDS_DIR / f) and f not in reviewed
             ])
             html = HTML.replace("__SOUNDS__", json.dumps(sounds))
             html = html.replace("__CATEGORIES__", json.dumps(CATEGORIES))
