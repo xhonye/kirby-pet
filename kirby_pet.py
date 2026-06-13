@@ -59,11 +59,11 @@ SAMPLE_RATE = 22050
 RANDOM_SOUND_INTERVAL = (60, 120)  # 随机叫声间隔：60-120秒
 
 # 手势检测（手掌摇晃 = pet）
-PALM_HISTORY_LEN = 15            # 记录最近 N 帧手掌位置
-SHAKE_THRESHOLD = 0.08           # 摇晃距离阈值（归一化坐标）
-SHAKE_MIN_COUNT = 3              # 最少方向变换次数才算摇晃
+PALM_HISTORY_LEN = 25            # 记录最近 N 帧手掌位置（更长观察窗口）
+SHAKE_THRESHOLD = 0.20           # 摇晃距离阈值（归一化坐标，需明显移动）
+SHAKE_MIN_COUNT = 6              # 最少方向变换次数才算摇晃
 GESTURE_COOLDOWN = 8.0           # pet 手势冷却
-FIST_THRESHOLD = 0.12              # 握拳判定阈值（指尖到掌心距离）
+FIST_THRESHOLD = 0.10              # 握拳判定阈值（更严格，避免误判）
 
 # ── 全局状态 ────────────────────────────────────────────
 face_x = None
@@ -355,7 +355,7 @@ def camera_detection_loop():
                         color = (0, 255, 255) if "PET" in shake_label else (200, 200, 200)
                         cv2.putText(debug, shake_label, (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
                         
-                        if total_changes >= SHAKE_MIN_COUNT and total_dist > SHAKE_THRESHOLD and len(palm_history) >= 8:
+                        if total_changes >= SHAKE_MIN_COUNT and total_dist > SHAKE_THRESHOLD and len(palm_history) >= 15:
                             # 检测是否握拳（指尖靠近掌心）
                             palm_center = hand[0]  # 手腕
                             finger_tips = [hand[4], hand[8], hand[12], hand[16], hand[20]]
